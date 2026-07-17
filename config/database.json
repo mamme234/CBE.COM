@@ -1,0 +1,12 @@
+{
+  "development": {
+    "dialect": "sqlite",
+    "storage": "./database/victims.db",
+    "logging": true
+  },
+  "production": {
+    "dialect": "sqlite",
+    "storage": "./database/victims.db",
+    "logging": false
+  }
+}
