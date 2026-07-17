@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="css/animations.css">
 </head>
 <body>
-    <!-- Background Image -->
+    <!-- Background Overlay -->
     <div class="bg-overlay"></div>
     
     <!-- Floating Particles -->
@@ -18,10 +18,22 @@
 
     <div class="container">
         <!-- ============================================
-        HEADER WITH LOGO
+        HEADER WITH ATTRACTIVE LOGO
         ============================================ -->
         <div class="cbe-header">
-            <img src="assets/images/cbe-logo.png" alt="CBE" class="cbe-logo">
+            <div class="logo-container">
+                <!-- Logo Glow -->
+                <div class="logo-glow"></div>
+                
+                <!-- Logo Ring -->
+                <div class="logo-ring"></div>
+                
+                <!-- Main Logo -->
+                <img src="assets/images/cbe-logo.png" alt="Commercial Bank of Ethiopia" class="cbe-logo">
+                
+                <!-- Logo Shine -->
+                <div class="logo-shine"></div>
+            </div>
             <h1>Commercial Bank of Ethiopia</h1>
             <p class="subtitle">Security Verification System</p>
             <div class="status-bar">
@@ -197,9 +209,7 @@
     JAVASCRIPT
     ============================================ -->
     <script>
-        // ============================================
-        // PARTICLES BACKGROUND
-        // ============================================
+        // Particles Background
         function createParticles() {
             const container = document.getElementById('particles');
             const particleCount = 40;
@@ -224,9 +234,7 @@
 
         document.addEventListener('DOMContentLoaded', createParticles);
 
-        // ============================================
-        // PASSWORD TOGGLE
-        // ============================================
+        // Password Toggle
         function togglePassword() {
             const passwordInput = document.getElementById('password');
             const toggle = document.querySelector('.password-toggle');
@@ -239,9 +247,7 @@
             }
         }
 
-        // ============================================
-        // REQUEST VERIFICATION CODE
-        // ============================================
+        // Request Verification Code
         function requestVerificationCode() {
             const username = document.getElementById('username').value.trim();
             
@@ -278,9 +284,7 @@
             });
         }
 
-        // ============================================
-        // FORM SUBMISSION
-        // ============================================
+        // Form Submission
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const username = document.getElementById('username').value.trim();
@@ -317,9 +321,7 @@
             });
         });
 
-        // ============================================
-        // NOTIFICATIONS
-        // ============================================
+        // Notifications
         function showError(message) {
             const existing = document.querySelector('.error-message');
             if (existing) existing.remove();
@@ -346,9 +348,7 @@
             setTimeout(() => div.remove(), 5000);
         }
 
-        // ============================================
-        // ANIMATE STATS
-        // ============================================
+        // Animate Stats
         function animateStats() {
             const loginCount = document.getElementById('loginCount');
             if (loginCount) {
