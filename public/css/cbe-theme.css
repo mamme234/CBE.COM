@@ -1,155 +1,433 @@
-/* CBE Theme Specific Styles */
+/* ============================================
+   CBE THEME - Complete Styles
+   ============================================ */
+
 :root {
     --cbe-red: #c8102e;
     --cbe-red-dark: #a00d25;
+    --cbe-red-light: #f8d7da;
     --cbe-gold: #f5a623;
     --cbe-dark: #1a1a2e;
     --cbe-gray: #f5f5f5;
+    --cbe-white: #ffffff;
+    
+    /* Badge Colors */
+    --badge-secure: #28a745;
+    --badge-verified: #007bff;
+    --badge-ssl: #17a2b8;
+    --badge-trusted: #6f42c1;
+    --badge-shield: #dc3545;
+    --badge-encrypted: #fd7e14;
+}
+
+/* ============================================
+   CBE HEADER WITH LOGO
+   ============================================ */
+
+.cbe-header {
+    text-align: center;
+    padding: 20px 0 15px;
+    border-bottom: 3px solid var(--cbe-red);
+}
+
+.cbe-header .cbe-logo {
+    max-height: 80px;
+    width: auto;
+    margin-bottom: 10px;
+    display: inline-block;
 }
 
 .cbe-header h1 {
     color: var(--cbe-red);
+    font-size: 24px;
+    margin: 8px 0 4px;
     font-weight: 700;
 }
 
-.cbe-btn {
-    background: var(--cbe-red);
+.cbe-header .subtitle {
+    color: #666;
+    font-size: 14px;
+    font-weight: 400;
+}
+
+/* ============================================
+   TRUST BADGES - COMPLETE SET
+   ============================================ */
+
+.trust-badges-container {
+    margin: 15px 0;
+    padding: 10px;
+    background: var(--cbe-gray);
+    border-radius: 12px;
+}
+
+.trust-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Base Badge Style */
+.trust-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    transition: all 0.3s ease;
+    cursor: default;
+    text-decoration: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.trust-badge:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.trust-badge .icon {
+    font-size: 16px;
+}
+
+/* Individual Badge Variants */
+.trust-badge.secure {
+    background: var(--badge-secure);
+}
+
+.trust-badge.verified {
+    background: var(--badge-verified);
+}
+
+.trust-badge.ssl {
+    background: var(--badge-ssl);
+}
+
+.trust-badge.trusted {
+    background: var(--badge-trusted);
+}
+
+.trust-badge.shield {
+    background: var(--badge-shield);
+}
+
+.trust-badge.encrypted {
+    background: var(--badge-encrypted);
+}
+
+.trust-badge.gold {
+    background: var(--cbe-gold);
+    color: var(--cbe-dark);
+}
+
+.trust-badge.dark {
+    background: var(--cbe-dark);
+}
+
+/* Badge Sizes */
+.trust-badge.small {
+    padding: 4px 12px;
+    font-size: 11px;
+    border-radius: 15px;
+}
+
+.trust-badge.large {
+    padding: 8px 24px;
+    font-size: 15px;
+    border-radius: 25px;
+}
+
+/* ============================================
+   CBE BANNER WITH LOGO
+   ============================================ */
+
+.cbe-banner {
+    background: linear-gradient(135deg, var(--cbe-red), var(--cbe-red-dark));
+    padding: 25px 20px;
+    border-radius: 12px;
+    text-align: center;
+    margin-bottom: 20px;
     position: relative;
     overflow: hidden;
 }
 
-.cbe-btn::after {
+.cbe-banner::before {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    background: rgba(255,255,255,0.2);
+    top: -50%;
+    right: -50%;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
     border-radius: 50%;
-    transform: translate(-50%, -50%);
-    transition: width 0.5s, height 0.5s;
 }
 
-.cbe-btn:active::after {
-    width: 300px;
-    height: 300px;
+.cbe-banner .banner-logo {
+    height: 70px;
+    width: auto;
+    filter: brightness(0) invert(1);
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
 }
 
-/* CBE Badges */
-.cbe-badge {
-    display: inline-block;
-    padding: 4px 12px;
+.cbe-banner h2 {
+    color: white;
+    font-size: 22px;
+    margin: 8px 0 4px;
+    position: relative;
+    z-index: 1;
+    font-weight: 700;
+}
+
+.cbe-banner p {
+    color: rgba(255,255,255,0.85);
+    font-size: 14px;
+    margin: 0;
+    position: relative;
+    z-index: 1;
+}
+
+/* ============================================
+   CBE BUTTON
+   ============================================ */
+
+.cbe-btn {
+    width: 100%;
+    padding: 15px;
     background: var(--cbe-red);
     color: white;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: bold;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-}
-
-/* Security Shield */
-.security-shield {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: rgba(200,16,46,0.05);
-    border: 1px solid rgba(200,16,46,0.1);
-    border-radius: 30px;
-    color: var(--cbe-red);
-    font-size: 12px;
-}
-
-/* Trust Indicators */
-.trust-indicator {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    padding: 15px;
-    background: var(--cbe-gray);
+    border: none;
     border-radius: 10px;
-    margin: 15px 0;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
 }
 
-.trust-item {
+.cbe-btn:hover {
+    background: var(--cbe-red-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(200,16,46,0.3);
+}
+
+.cbe-btn:active {
+    transform: translateY(0);
+}
+
+.cbe-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.cbe-btn.green {
+    background: var(--badge-secure);
+}
+
+.cbe-btn.green:hover {
+    background: #1e7e34;
+}
+
+.cbe-btn.blue {
+    background: var(--badge-verified);
+}
+
+.cbe-btn.blue:hover {
+    background: #0056b3;
+}
+
+/* ============================================
+   SECURITY INFO PANEL
+   ============================================ */
+
+.security-info {
+    margin-top: 25px;
+    padding: 18px;
+    background: var(--cbe-gray);
+    border-radius: 12px;
+    border-left: 4px solid var(--cbe-red);
+}
+
+.security-info .info-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.security-info .info-header img {
+    height: 30px;
+    width: auto;
+}
+
+.security-info .info-header span {
+    font-weight: 700;
+    color: var(--cbe-red);
+    font-size: 16px;
+}
+
+.security-info .info-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 0;
     color: #555;
+    font-size: 13px;
 }
 
-.trust-item .icon {
+.security-info .info-row .icon {
     font-size: 18px;
+    width: 24px;
+    text-align: center;
 }
 
-/* CBE Loading Rings */
-.cbe-loader {
+/* ============================================
+   FOOTER WITH LOGO
+   ============================================ */
+
+.cbe-footer {
+    text-align: center;
+    padding: 25px 0 10px;
+    border-top: 1px solid #e0e0e0;
+    margin-top: 30px;
+}
+
+.cbe-footer .footer-logo {
+    height: 40px;
+    width: auto;
+    margin-bottom: 10px;
+    display: inline-block;
+}
+
+.cbe-footer p {
+    color: #888;
+    font-size: 12px;
+    margin: 5px 0;
+}
+
+.cbe-footer .footer-links {
     display: flex;
     justify-content: center;
+    gap: 20px;
+    margin-top: 10px;
+}
+
+.cbe-footer .footer-links a {
+    color: #888;
+    font-size: 12px;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.cbe-footer .footer-links a:hover {
+    color: var(--cbe-red);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 600px) {
+    .cbe-header .cbe-logo {
+        max-height: 60px;
+    }
+    
+    .cbe-header h1 {
+        font-size: 20px;
+    }
+    
+    .cbe-banner .banner-logo {
+        height: 50px;
+    }
+    
+    .cbe-banner h2 {
+        font-size: 18px;
+    }
+    
+    .trust-badge {
+        padding: 4px 12px;
+        font-size: 11px;
+    }
+    
+    .trust-badge .icon {
+        font-size: 13px;
+    }
+    
+    .trust-badges {
+        gap: 6px;
+    }
+    
+    .security-info .info-header span {
+        font-size: 14px;
+    }
+    
+    .cbe-footer .footer-links {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes badgePulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+.trust-badge.pulse {
+    animation: badgePulse 2s ease-in-out infinite;
+}
+
+@keyframes badgeGlow {
+    0%, 100% {
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(40,167,69,0.3);
+    }
+}
+
+.trust-badge.glow {
+    animation: badgeGlow 2s ease-in-out infinite;
+}
+
+/* ============================================
+   BADGE CONTAINER VARIANTS
+   ============================================ */
+
+.trust-badges-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+}
+
+.trust-badges-row .trust-badge {
+    flex: 0 0 auto;
+}
+
+.trust-badges-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 10px;
 }
 
-.loader-ring {
-    width: 15px;
-    height: 15px;
-    border: 3px solid var(--cbe-gray);
-    border-top-color: var(--cbe-red);
-    border-radius: 50%;
-    animation: ring-spin 0.8s linear infinite;
-}
-
-.loader-ring:nth-child(2) {
-    animation-delay: 0.2s;
-    border-top-color: var(--cbe-gold);
-}
-
-.loader-ring:nth-child(3) {
-    animation-delay: 0.4s;
-    border-top-color: var(--cbe-dark);
-}
-
-@keyframes ring-spin {
-    to { transform: rotate(360deg); }
-}
-
-/* CBE Card Styles */
-.cbe-card {
-    background: white;
-    border-radius: 15px;
-    box-shadow: 0 5px 30px rgba(0,0,0,0.05);
-    padding: 25px;
-    transition: transform 0.3s, box-shadow 0.3s;
-}
-
-.cbe-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 40px rgba(0,0,0,0.08);
-}
-
-/* Form Inputs with CBE Theme */
-.form-group input:focus {
-    border-color: var(--cbe-red);
-    box-shadow: 0 0 0 3px rgba(200,16,46,0.1);
-}
-
-/* CBE Footer */
-.cbe-footer {
-    text-align: center;
-    padding: 20px;
-    font-size: 12px;
-    color: #999;
-    border-top: 1px solid #eee;
-    margin-top: 20px;
-}
-
-.cbe-footer a {
-    color: var(--cbe-red);
-    text-decoration: none;
-}
-
-.cbe-footer a:hover {
-    text-decoration: underline;
-  }
+.trust-badges-grid .trust-badge {
+    justify-content: center;
+    padding: 8px 16px;
+    }
