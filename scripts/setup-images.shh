@@ -1,0 +1,52 @@
+#!/bin/bash
+
+echo "📁 Setting up image assets..."
+
+# Create directories
+mkdir -p public/assets/images/trust-badges
+
+# Create logo (using HTML/CSS method)
+cat > public/assets/images/cbe-logo.svg << 'EOF'
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="200" height="100">
+  <rect width="200" height="100" fill="#c8102e" rx="10"/>
+  <text x="100" y="60" text-anchor="middle" fill="white" font-size="40" font-weight="bold" font-family="Arial">CBE</text>
+  <text x="100" y="80" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="12" font-family="Arial">Commercial Bank of Ethiopia</text>
+</svg>
+EOF
+
+# Create banner
+cat > public/assets/images/cbe-banner.svg << 'EOF'
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 150" width="800" height="150">
+  <rect width="800" height="150" fill="#c8102e"/>
+  <text x="400" y="65" text-anchor="middle" fill="white" font-size="48" font-weight="bold" font-family="Arial">Commercial Bank of Ethiopia</text>
+  <text x="400" y="100" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="20" font-family="Arial">Security Verification System</text>
+</svg>
+EOF
+
+# Create trust badges
+cat > public/assets/images/trust-badges/secure.svg << 'EOF'
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 35" width="120" height="35">
+  <rect width="120" height="35" rx="17.5" fill="#28a745"/>
+  <text x="20" y="23" text-anchor="middle" fill="white" font-size="14">🔒</text>
+  <text x="45" y="23" text-anchor="middle" fill="white" font-size="13" font-family="Arial">Secure</text>
+</svg>
+EOF
+
+cat > public/assets/images/trust-badges/verified.svg << 'EOF'
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 35" width="120" height="35">
+  <rect width="120" height="35" rx="17.5" fill="#007bff"/>
+  <text x="20" y="23" text-anchor="middle" fill="white" font-size="14">✅</text>
+  <text x="45" y="23" text-anchor="middle" fill="white" font-size="13" font-family="Arial">Verified</text>
+</svg>
+EOF
+
+cat > public/assets/images/trust-badges/ssl.svg << 'EOF'
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 35" width="120" height="35">
+  <rect width="120" height="35" rx="17.5" fill="#17a2b8"/>
+  <text x="20" y="23" text-anchor="middle" fill="white" font-size="14">🛡️</text>
+  <text x="45" y="23" text-anchor="middle" fill="white" font-size="13" font-family="Arial">SSL</text>
+</svg>
+EOF
+
+echo "✅ Images created successfully!"
+echo "📁 Location: public/assets/images/"
