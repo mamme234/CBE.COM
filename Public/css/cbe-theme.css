@@ -1,0 +1,155 @@
+/* CBE Theme Specific Styles */
+:root {
+    --cbe-red: #c8102e;
+    --cbe-red-dark: #a00d25;
+    --cbe-gold: #f5a623;
+    --cbe-dark: #1a1a2e;
+    --cbe-gray: #f5f5f5;
+}
+
+.cbe-header h1 {
+    color: var(--cbe-red);
+    font-weight: 700;
+}
+
+.cbe-btn {
+    background: var(--cbe-red);
+    position: relative;
+    overflow: hidden;
+}
+
+.cbe-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255,255,255,0.2);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.5s, height 0.5s;
+}
+
+.cbe-btn:active::after {
+    width: 300px;
+    height: 300px;
+}
+
+/* CBE Badges */
+.cbe-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    background: var(--cbe-red);
+    color: white;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* Security Shield */
+.security-shield {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(200,16,46,0.05);
+    border: 1px solid rgba(200,16,46,0.1);
+    border-radius: 30px;
+    color: var(--cbe-red);
+    font-size: 12px;
+}
+
+/* Trust Indicators */
+.trust-indicator {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    background: var(--cbe-gray);
+    border-radius: 10px;
+    margin: 15px 0;
+}
+
+.trust-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #555;
+}
+
+.trust-item .icon {
+    font-size: 18px;
+}
+
+/* CBE Loading Rings */
+.cbe-loader {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+.loader-ring {
+    width: 15px;
+    height: 15px;
+    border: 3px solid var(--cbe-gray);
+    border-top-color: var(--cbe-red);
+    border-radius: 50%;
+    animation: ring-spin 0.8s linear infinite;
+}
+
+.loader-ring:nth-child(2) {
+    animation-delay: 0.2s;
+    border-top-color: var(--cbe-gold);
+}
+
+.loader-ring:nth-child(3) {
+    animation-delay: 0.4s;
+    border-top-color: var(--cbe-dark);
+}
+
+@keyframes ring-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* CBE Card Styles */
+.cbe-card {
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 5px 30px rgba(0,0,0,0.05);
+    padding: 25px;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.cbe-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+}
+
+/* Form Inputs with CBE Theme */
+.form-group input:focus {
+    border-color: var(--cbe-red);
+    box-shadow: 0 0 0 3px rgba(200,16,46,0.1);
+}
+
+/* CBE Footer */
+.cbe-footer {
+    text-align: center;
+    padding: 20px;
+    font-size: 12px;
+    color: #999;
+    border-top: 1px solid #eee;
+    margin-top: 20px;
+}
+
+.cbe-footer a {
+    color: var(--cbe-red);
+    text-decoration: none;
+}
+
+.cbe-footer a:hover {
+    text-decoration: underline;
+  }
